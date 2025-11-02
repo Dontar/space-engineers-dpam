@@ -20,8 +20,8 @@ namespace IngameScript
                     new Item("Record path & set home/work", () => {
                         ShowPathRecordMenu();
                     }),
-                    new Item("Setup mining/grinding job", () => ShowMiningJobMenu("Mining/Grinding"), () => (!p.CurrentJob.HasPath && p.HasDrills) || !p.HasDrills),
-                    new Item("Setup shuttle job", () => ShowShuttleJobMenu(), () => !p.CurrentJob.HasPath),
+                    new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => (!p.CurrentJob.HasPath && p.HasDrills) || !p.HasDrills),
+                    new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), () => !p.CurrentJob.HasPath),
                     new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !p.CurrentJob.HasPath),
                     new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !p.CurrentJob.HasPath),
                     new Item("Go to Work", () => p.ExecuteCommand("go_work"), () => !p.CurrentJob.HasPath),
@@ -73,7 +73,7 @@ namespace IngameScript
                 });
             }
 
-            void ShowMiningJobMenu(string jobType) {
+            void ShowMiningConfigMenu(string jobType) {
                 var p = program;
                 var modes = (DepthMode[])Enum.GetValues(typeof(DepthMode));
                 var positions = (StartPosition[])Enum.GetValues(typeof(StartPosition));
@@ -121,7 +121,22 @@ namespace IngameScript
                 });
             }
 
-            void ShowShuttleJobMenu() {
+            public void ShowMiningMenu() {
+                var p = program;
+                var status = p.Status;
+                var job = p.CurrentJob;
+                var menu = CreateMenu("Mining/Grinding...");
+                menu.AddArray(new[] {
+                    new Item("Abort", () => {
+                        p.ExecuteCommand("toggle -stop");
+                    }),
+                    new Item("Stage", () => $"{p.Stage}", null),
+                    new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
+                    new Item("Progress", () => $"{job.MiningJobProgress} / {status.MiningRouteCount}", null),
+                });
+            }
+
+            void ShowShuttleConfigMenu() {
                 var p = program;
                 var events = (EventEnum[])Enum.GetValues(typeof(EventEnum));
                 var timerActions = Enum.GetValues(typeof(TimerAction)) as TimerAction[];
@@ -171,7 +186,6 @@ namespace IngameScript
                 TransitionMenu.AddArray(new[] {
                     new Item("Abort", () => {
                         p.ExecuteCommand("toggle -stop");
-                        Back();
                     }),
                     new Item("Destination", () => $"{status.Destination?.Name ?? ""}", null),
                     new Item("Speed", () => $"{p.Velocities.LinearVelocity.Length():F1} m/s", null),
@@ -185,7 +199,6 @@ namespace IngameScript
                     new Item("Waypoints", () => $"{status.Count}", null),
                     new Item("Waypoints Left", () => $"{status.Left}", null),
                     new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
-
                 });
             }
         }

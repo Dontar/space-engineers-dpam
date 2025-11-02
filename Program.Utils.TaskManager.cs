@@ -11,7 +11,9 @@ namespace IngameScript
         {
             ITask Every(float seconds);
             ITask Pause(bool pause = true);
-            bool Paused { get; }
+            bool Paused {
+                get;
+            }
             ITask Once();
             void Restart();
             T Result<T>();
@@ -108,7 +110,10 @@ namespace IngameScript
 
             public static ITask SetTimeout(Action cb, float delaySeconds) =>
                 RunTask(InternalTask(_ => cb())).Once().Every(delaySeconds);
-            public static void StopTask(ITask task) => tasks.Remove((Task)task);
+            public static void StopTask(ITask task) {
+                tasks.Remove((Task)task);
+                ((Task)task).onDone?.Invoke();
+            }
 
             public static bool IsRunning(ITask task) {
                 return tasks.Contains((Task)task);
@@ -118,12 +123,14 @@ namespace IngameScript
             public static void Tick(TimeSpan TimeSinceLastRun) {
                 for (int i = tasks.Count - 1; i >= 0; i--) {
                     var task = tasks[i];
-                    if (task.IsPaused) continue;
+                    if (task.IsPaused)
+                        continue;
 
                     task.TaskResult = null;
 
                     task.TimeSinceLastRun += TimeSinceLastRun;
-                    if (task.TimeSinceLastRun < task.Interval) continue;
+                    if (task.TimeSinceLastRun < task.Interval)
+                        continue;
 
                     CurrentTaskLastRun = task.TimeSinceLastRun;
                     try {

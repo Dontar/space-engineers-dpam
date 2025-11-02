@@ -203,7 +203,9 @@ namespace IngameScript
             var coordGrid = GenerateWorkGridArray(matrix, workArea.Min, workArea.Max, Dimensions.Size);
             var sizeY = coordGrid.GetLength(0);
             var sizeX = coordGrid.GetLength(1);
-            var path = (CurrentJob.StartPosition == StartPosition.Center ? SpiralRoute(sizeY, sizeX) : RasterRoute(sizeY, sizeX)).GetEnumerator();
+            var route = CurrentJob.StartPosition == StartPosition.Center ? SpiralRoute(sizeY, sizeX) : RasterRoute(sizeY, sizeX);
+            Status.MiningRouteCount = route.Count();
+            var path = route.Skip(CurrentJob.MiningJobProgress - 1).GetEnumerator();
             var start = Vector3D.Zero;
             var end = Vector3D.Zero;
             var isLast = false;
@@ -281,6 +283,7 @@ namespace IngameScript
                         if (Stage == MiningJobStages.ThrowGarbage)
                             continue;
                         isLast = !path.MoveNext();
+                        CurrentJob.MiningJobProgress++;
                         Stage = MiningJobStages.TransitionToShaftStart;
                         if (isLast)
                             Stage = MiningJobStages.Done;
@@ -333,6 +336,7 @@ namespace IngameScript
 
                         ToggleMainTask(false);
                         Stage = MiningJobStages.None;
+                        CurrentJob.MiningJobProgress = 0;
                         yield break;
                 }
             }
@@ -381,9 +385,13 @@ namespace IngameScript
 
         void ToggleMainTask(bool start) {
             if (start) {
-                if (!Task.IsRunning(_MainTask)) {
+                if (!Task.IsRunning(_MainTask) && CurrentJob.Type != JobType.None) {
                     ToggleTransitionTask("", false);
-                    _MainTask = Task.RunTask(MainTask());
+                    if (CurrentJob.Type == JobType.Shuttle)
+                        MainMenu.ShowTransitionMenu();
+                    else
+                        MainMenu.ShowMiningMenu();
+                    _MainTask = Task.RunTask(MainTask()).OnDone(() => MainMenu.Back());
                 }
             }
             else {
@@ -399,8 +407,12 @@ namespace IngameScript
                 if (!Task.IsRunning(_TransitionTask)) {
                     ToggleMainTask(false);
                     CurrentJob.CurrentDestination = name;
+                    MainMenu.ShowTransitionMenu();
                     _TransitionTask = Task.RunTask(GotoPosition(name)).Once()
-                        .OnDone(() => CurrentJob.CurrentDestination = name == "Home" ? "Work" : "Home");
+                        .OnDone(() => {
+                            CurrentJob.CurrentDestination = name == "Home" ? "Work" : "Home";
+                            MainMenu.Back();
+                        });
                 }
             }
             else {

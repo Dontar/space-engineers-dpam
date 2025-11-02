@@ -152,6 +152,7 @@ namespace IngameScript
             public StartPosition StartPosition;
             public Waypoint WorkLocation;
             public MiningJobStages MiningJobStage;
+            public int MiningJobProgress;
             public bool TerrainClear;
             public bool BalanceDrills;
             public string CurrentDestination;
@@ -193,6 +194,8 @@ namespace IngameScript
 
                 MiningJobStage = (MiningJobStages)Get(Name, "MiningJobStage").ToInt32((int)MiningJobStages.None);
 
+                MiningJobProgress = Get(Name, "MiningJobProgress").ToInt32(0);
+
                 TerrainClear = Get(Name, "TerrainClear").ToBoolean(false);
                 BalanceDrills = Get(Name, "BalanceDrills").ToBoolean(true);
                 CurrentDestination = Get(Name, "CurrentDirection").ToString("Work");
@@ -222,6 +225,7 @@ namespace IngameScript
                 Set(Name, "StartPosition", (int)StartPosition);
                 Set(Name, "WorkLocation", WorkLocation?.ToString() ?? "");
                 Set(Name, "MiningJobStage", (int)MiningJobStage);
+                Set(Name, "MiningJobProgress", MiningJobProgress);
                 Set(Name, "TerrainClear", TerrainClear);
                 Set(Name, "BalanceDrills", BalanceDrills);
                 Set(Name, "CurrentDirection", CurrentDestination);
@@ -276,6 +280,7 @@ namespace IngameScript
             public int Left;
             public double Speed;
             public float MinDistance;
+            public int MiningRouteCount;
         }
         JobStatus Status = new JobStatus();
 

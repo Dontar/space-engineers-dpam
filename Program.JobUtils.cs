@@ -187,7 +187,6 @@ namespace IngameScript
             var currentPosition = MyMatrix.Translation;
             if ((CurrentJob.Path?.Count ?? 0) == 0)
                 yield break;
-            MainMenu.ShowTransitionMenu();
             var path = new List<Waypoint>(CurrentJob.Path);
             if (pos == "Home")
                 path.Reverse();
@@ -230,7 +229,6 @@ namespace IngameScript
             }
             ResetThrusters(Thrusters.Values.SelectMany(t => t));
             ResetGyros();
-            MainMenu.Back();
             if (waitForDock != null) {
                 while (!waitForDock(last.Name))
                     yield return null;
