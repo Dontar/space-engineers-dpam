@@ -1,0 +1,347 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using Sandbox.ModAPI.Ingame;
+using SpaceEngineers.Game.ModAPI.Ingame;
+using VRage;
+using VRage.Game;
+using VRageMath;
+
+namespace IngameScript
+{
+    public partial class Program : MyGridProgram
+    {
+        float CalcRequiredGyroForce(IEnumerable<IMyGyro> gyros, float roll, int magnitude = 10) {
+            if (gyros.Count() == 0)
+                return 0;
+
+            var gravityMagnitude = Gravity.Length();
+
+            var blockSize = (Me.CubeGrid.GridSizeEnum == MyCubeSize.Large) ? 2.5f : 0.5f; // meters
+            var min = Me.CubeGrid.Min;
+            var max = Me.CubeGrid.Max;
+            var size = (max - min + Vector3I.One) * blockSize;
+
+            var width = size.X;
+            var height = size.Y;
+            // var length = size.Z;
+
+            var pivotPoint = width / 2;
+            var maxForce = gyros.Sum(g => g.CubeGrid.GridSizeEnum == MyCubeSize.Small ? 448000 : 3.36E+07) * pivotPoint;
+
+            var force = Mass.PhysicalMass * gravityMagnitude * pivotPoint;
+
+            var inertia = 1.0 / 12.0 * Mass.PhysicalMass * (width * width + height * height);
+            var torqueAccel = inertia * Math.Abs(roll) * magnitude;
+
+            return (float)(Math.Min(force + torqueAccel, maxForce) / maxForce);
+        }
+
+        void OrientGridToMatrix(IEnumerable<IMyGyro> gyros, MatrixD alignTo, bool revert = false) {
+            var myMatrix = Controller.WorldMatrix;
+            var down = alignTo.Down;
+            var forward = revert ? alignTo.Backward : alignTo.Forward;
+            var roll = Math.Atan2(down.Dot(myMatrix.Right), down.Dot(myMatrix.Down));
+            var pitch = Math.Atan2(down.Dot(myMatrix.Backward), down.Dot(myMatrix.Down));
+            var yaw = Math.Atan2(forward.Dot(myMatrix.Right), forward.Dot(myMatrix.Forward));
+
+            var power = CalcRequiredGyroForce(gyros, 30 * MathHelper.RPMToRadiansPerSecond, 5);
+
+            Util.ApplyGyroOverride(pitch, yaw, -roll, power, gyros, Controller.WorldMatrix);
+        }
+
+        void ResetGyros() {
+            foreach (var gyro in Gyros) {
+                gyro.GyroOverride = false;
+                gyro.GyroPower = 1;
+                gyro.Yaw = 0;
+                gyro.Pitch = 0;
+                gyro.Roll = 0;
+            }
+        }
+
+        bool MoveGridToPosition(Vector3D position, double speed, float minDistance) {
+            var toTarget = position - MyMatrix.Translation;
+            var distance = toTarget.Length();
+            if (distance < minDistance) {
+                ResetThrusters(Thrusters.Values.SelectMany(v => v));
+                return true;
+            }
+
+            var direction = Vector3D.Normalize(toTarget);
+            var velocity = Velocities.LinearVelocity;
+
+            var desiredVelocity = direction * speed;
+            var requiredAccelVec = desiredVelocity - velocity;
+
+            // Movement force (in Newtons)
+            var moveForceVec = requiredAccelVec * Mass.PhysicalMass;
+
+            // Gravity compensation
+            var gravityForceVec = -Gravity * Mass.PhysicalMass;
+
+            Controller.DampenersOverride = Thrusters.ContainsKey(Base6Directions.Direction.Down);
+
+            foreach (var dir in Thrusters.Keys) {
+                var thrusterArray = Thrusters[dir];
+
+                var thrustDir = thrusterArray[0].WorldMatrix.Backward;
+
+                // Project movement and gravity forces onto thruster direction
+                var moveForce = moveForceVec.Dot(thrustDir);
+                var gravityForce = gravityForceVec.Dot(thrustDir);
+
+                // Total force needed from this thruster direction
+                var totalForce = moveForce + gravityForce;
+
+                var totalMaxThrust = thrusterArray.Sum(t => t.MaxThrust);
+                var thrustToApply = MathHelper.Clamp((float)totalForce, 0, totalMaxThrust);
+
+                foreach (var thruster in thrusterArray) {
+                    var portion = thruster.MaxThrust / totalMaxThrust;
+                    thruster.ThrustOverride = thrustToApply * portion;
+                }
+            }
+            return false;
+        }
+
+        void ResetThrusters(IEnumerable<IMyThrust> thrusterArray) {
+            foreach (var thruster in thrusterArray) {
+                thruster.ThrustOverridePercentage = 0;
+            }
+            Controller.DampenersOverride = true;
+        }
+
+        Vector3D[,] GenerateWorkGridArray(MatrixD matrix, Vector3D min, Vector3D max, Vector3 cellSize) {
+            var right = matrix.Right;
+            var up = matrix.Up;
+            var forward = matrix.Forward;
+            var sizeX = (int)Math.Floor((max.X - min.X) / cellSize.X) + 1;
+            var sizeY = (int)Math.Floor((max.Y - min.Y) / cellSize.Y) + 1;
+
+            var cells = new Vector3D[sizeY, sizeX];
+
+            for (int iy = 0; iy < sizeY; iy++) {
+                for (int ix = 0; ix < sizeX; ix++) {
+                    var offset = right * (ix * cellSize.X + cellSize.X / 2)
+                               + up * (iy * cellSize.Y + cellSize.Y / 2)
+                               + forward * (cellSize.Z / 2);
+                    cells[iy, ix] = min + offset;
+                }
+            }
+            return cells;
+        }
+
+        IEnumerable<int[]> SpiralRoute(int sizeY, int sizeX) {
+            var visited = new bool[sizeY, sizeX];
+
+            int cy = sizeY % 2 == 1 ? sizeY / 2 : sizeY / 2 - 1;
+            int cx = sizeX % 2 == 1 ? sizeX / 2 : sizeX / 2 - 1;
+
+            // BFS spiral out
+            var queue = new Queue<int[]>();
+            queue.Enqueue(new[] { cy, cx });
+            visited[cy, cx] = true;
+
+            int[] dx = { -1, 1, 0, 0 };
+            int[] dy = { 0, 0, -1, 1 };
+
+            while (queue.Count > 0) {
+                var point = queue.Dequeue();
+                int iy = point[0], ix = point[1];
+                yield return point;
+                for (int d = 0; d < 4; d++) {
+                    int nx = ix + dx[d], ny = iy + dy[d];
+                    if (nx >= 0 && nx < sizeX && ny >= 0 && ny < sizeY && !visited[ny, nx]) {
+                        visited[ny, nx] = true;
+                        queue.Enqueue(new[] { ny, nx });
+                    }
+                }
+            }
+        }
+
+        IEnumerable<int[]> RasterRoute(int sizeY, int sizeX) {
+            for (int iy = sizeY - 1; iy >= 0; iy--) {
+                for (int ix = 0; ix < sizeX; ix++) {
+                    yield return new[] { iy, ix };
+                }
+            }
+        }
+
+        BoundingBox ProjectBoxFrontOfShip(MatrixD position, Vector3 size) {
+            var forward = position.Forward;
+            var up = position.Up;
+            var right = position.Right;
+            var pos = position.Translation;
+
+            var halfSize = size / 2;
+
+            var min = pos - right * halfSize.X - up * halfSize.Y;
+            var max = pos + right * halfSize.X + up * halfSize.Y + forward * size.Z;
+
+            return new BoundingBox(min, max);
+        }
+
+        IEnumerable GotoPosition(string pos, Func<string, bool> waitForUndock = null, Func<string, bool> waitForDock = null) {
+            var currentPosition = MyMatrix.Translation;
+            if ((CurrentJob.Path?.Count ?? 0) == 0)
+                yield break;
+            MainMenu.ShowTransitionMenu();
+            var path = new List<Waypoint>(CurrentJob.Path);
+            if (pos == "Home")
+                path.Reverse();
+            var last = path[path.Count - 1];
+            Waypoint previous = path[0];
+            Status.Destination = last;
+            Status.Count = path.Count;
+
+            var closestWaypoint = path.MinBy(w => (float)Vector3D.DistanceSquared(w.Matrix.Translation, MyMatrix.Translation));
+            var pathIdx = path.IndexOf(closestWaypoint);
+            if (pathIdx > 0) {
+                var direction = Vector3D.Normalize(path[pathIdx].Matrix.Translation - currentPosition);
+                previous = new Waypoint(MatrixD.CreateWorld(currentPosition, direction, -Gravity), "Previous");
+            }
+            pathIdx += 1;
+
+            if (waitForUndock != null)
+                while (!waitForUndock(path[0].Name))
+                    yield return null;
+
+            Status.MinDistance = (float)Me.CubeGrid.WorldVolume.Radius * 2f;
+            Status.Speed = CurrentJob.Speed;
+            for (var i = pathIdx; i < path.Count; i++) {
+                var currentWaypoint = path[i];
+                Status.Current = currentWaypoint;
+                Status.Left = path.Count - 1 - i;
+                while (!MoveGridToPosition(currentWaypoint.Matrix.Translation, Status.Speed, Status.MinDistance)) {
+                    var distanceToLast = Vector3D.Distance(MyMatrix.Translation, last.Matrix.Translation);
+                    if (distanceToLast < 200) {
+                        Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distanceToLast, 200, CurrentJob.Speed));
+                        Status.MinDistance = (float)Math.Max(0.5, Util.NormalizeValue(distanceToLast, 100, (float)Me.CubeGrid.WorldVolume.Radius * 2f));
+                    }
+                    if (distanceToLast < 50)
+                        OrientGridToMatrix(Gyros, last.Matrix);
+                    else
+                        OrientGridToMatrix(Gyros, previous.Matrix, pos == "Home");
+                    yield return null;
+                }
+                previous = currentWaypoint;
+            }
+            ResetThrusters(Thrusters.Values.SelectMany(t => t));
+            ResetGyros();
+            MainMenu.Back();
+            if (waitForDock != null) {
+                while (!waitForDock(last.Name))
+                    yield return null;
+
+            }
+        }
+        bool WaitForUndock(string pos) {
+            IMyShipConnector connector;
+            if (IsConnectedOrReady(out connector)) {
+                if (CheckConnectorCondition(pos)) {
+                    connector.Disconnect();
+                    OnUnDockTimers(pos);
+                    return true;
+                }
+                return false;
+            }
+            return true;
+        }
+        bool WaitForDock(string pos) {
+            IMyShipConnector connector;
+            if (IsConnectedOrReady(out connector)) {
+                connector.Connect();
+                OnDockTimers(pos);
+                return true;
+            }
+            return false;
+        }
+        bool CheckConnectorCondition(string pos) {
+            var condition = pos == "Home" ? CurrentJob.LeaveConnector1 : CurrentJob.LeaveConnector2;
+            switch (condition) {
+                case EventEnum.ShipIsEmpty:
+                    return FillLevel < 0.1;
+                case EventEnum.ShipIsFull:
+                    return FillLevel > 98;
+                case EventEnum.UndockCommand:
+                    if (commandQueue.Contains("Undock")) {
+                        var command = commandQueue.Dequeue();
+                        return command == "Undock";
+                    }
+                    break;
+            }
+            return false;
+        }
+
+        bool IsConnectedOrReady(out IMyShipConnector connector) {
+            var connectable = new[] { MyShipConnectorStatus.Connectable, MyShipConnectorStatus.Connected };
+            connector = Connectors.FirstOrDefault(c => connectable.Contains(c.Status));
+            return connector != null;
+        }
+
+        void OnDockTimers(string pos) {
+            var timer = pos == "Home" ? CurrentJob.TimerDockingHome : CurrentJob.TimerDockingWork;
+            var action = pos == "Home" ? CurrentJob.TimerDockingHomeAction : CurrentJob.TimerDockingWorkAction;
+            if (timer != "None") {
+                var timerBlock = (IMyTimerBlock)GridTerminalSystem.GetBlockWithName(timer);
+                if (timerBlock != null) {
+                    if (action == TimerAction.Start)
+                        timerBlock.StartCountdown();
+                    else
+                        timerBlock.Trigger();
+                }
+            }
+        }
+        void OnUnDockTimers(string pos) {
+            var timer = pos == "Home" ? CurrentJob.TimerLeavingHome : CurrentJob.TimerLeavingWork;
+            var action = pos == "Home" ? CurrentJob.TimerLeavingHomeAction : CurrentJob.TimerLeavingWorkAction;
+            if (timer != "None") {
+                var timerBlock = (IMyTimerBlock)GridTerminalSystem.GetBlockWithName(timer);
+                if (timerBlock != null) {
+                    if (action == TimerAction.Start)
+                        timerBlock.StartCountdown();
+                    else
+                        timerBlock.Trigger();
+                }
+            }
+        }
+        void BalanceDrillInventories() {
+            var totalMass = DrillInventories.Sum(i => (float)i.CurrentMass);
+            var targetMass = totalMass / Math.Max(DrillInventories.Count(), 1);
+            foreach (var inv in DrillInventories) {
+                if (inv.CurrentMass.RawValue > targetMass) {
+                    var toTransfer = (float)inv.CurrentMass - targetMass;
+                    inv.GetItems(null, item => {
+                        if (toTransfer <= 0)
+                            return false;
+                        var itemMass = item.Amount.RawValue;
+                        var amountToTransfer = MathHelper.Min((float)item.Amount, toTransfer);
+                        foreach (var otherInv in DrillInventories) {
+                            if (otherInv == inv)
+                                continue;
+                            if (inv.TransferItemTo(otherInv, item, (MyFixedPoint)amountToTransfer)) {
+                                toTransfer -= amountToTransfer;
+                                if (toTransfer <= 0)
+                                    break;
+                            }
+                        }
+                        return false;
+                    });
+                }
+            }
+        }
+        string PathToGps() {
+            var gpsList = new List<string>();
+            if ((CurrentJob.Path?.Count ?? 0) == 0)
+                return "";
+            foreach (var waypoint in CurrentJob.Path) {
+                var pos = waypoint.Matrix.Translation;
+                var gps = $"GPS:{waypoint.Name}:{pos.X}:{pos.Y}:{pos.Z}:";
+                gpsList.Add(gps);
+            }
+            return string.Join(Environment.NewLine, gpsList);
+        }
+    }
+}
