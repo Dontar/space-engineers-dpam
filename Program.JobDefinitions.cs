@@ -279,9 +279,13 @@ namespace IngameScript
         }
         JobStatus Status = new JobStatus();
 
-        MiningJobStages Stage;
-
-
-
+        MiningJobStages Stage {
+            get {
+                return CurrentJob.MiningJobStage;
+            }
+            set {
+                CurrentJob.MiningJobStage = value;
+            }
+        }
     }
 }
