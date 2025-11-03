@@ -88,7 +88,7 @@ namespace IngameScript
             public static double NormalizeValue(double value, double oldMax, double max)
                 => NormalizeValue(value, 0, oldMax, 0, max);
             public static double NormalizeClamp(double value, double oldMin, double oldMax, double min, double max)
-                => MathHelper.Clamp(NormalizeValue(value, oldMin, oldMax, min, max), min, max);
+                => MathHelper.Clamp(NormalizeValue(value, oldMin, oldMax, min, max), min > max ? max : min, max < min ? min : max);
             public static double NormalizeClamp(double value, double oldMax, double max)
                 => MathHelper.Clamp(NormalizeValue(value, 0, oldMax, 0, max), 0, max);
             public static bool IsNotIgnored(IMyTerminalBlock block, string ignoreTag = "{Ignore}")

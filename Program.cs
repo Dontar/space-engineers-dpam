@@ -40,9 +40,7 @@ namespace IngameScript
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
             Task.RunTask(RenderMenuTask()).Every(1.7f);
-            if (!CurrentJob.Paused) {
-                _MainTask = Task.RunTask(MainTask());
-            }
+            ToggleMainTask(!CurrentJob.Paused);
         }
 
         ITask _LogoTask;
@@ -62,7 +60,7 @@ namespace IngameScript
                     ExecuteCommand(argument);
                 }
                 catch (Exception e) {
-                    Util.Echo($"Error executing command: {e.Message}");
+                    Util.Echo($"Error executing command: {e.Message}" + Environment.NewLine + e.StackTrace);
                 }
 
             if (!updateSource.HasFlag(UpdateType.Update10))
@@ -138,34 +136,14 @@ namespace IngameScript
                     result.Append(PathToGps());
                     Me.CustomData = result.ToString();
                     break;
-                case "test_1":
-                    if (!Task.IsRunning(_TestTask))
-                        _TestTask = Task.RunTask(TestTask(CurrentJob.Path[0].Matrix, false));
-                    else {
-                        Task.StopTask(_TestTask);
-                        ResetGyros();
-                    }
-                    break;
-                case "test_2":
-                    if (!Task.IsRunning(_TestTask))
-                        _TestTask = Task.RunTask(TestTask(CurrentJob.Path[0].Matrix, true));
-                    else {
-                        Task.StopTask(_TestTask);
-                        ResetGyros();
-                    }
+                case "test_4":
+                    CurrentJob.MiningJobStage = MiningJobStages.None;
+                    CurrentJob.MiningJobProgress = 0;
                     break;
                 default:
                     if (MainMenu.ProcessMenuCommands(Cmd))
                         RenderMenu();
                     break;
-            }
-        }
-
-        ITask _TestTask;
-        IEnumerable TestTask(MatrixD matrix, bool reverse) {
-            while (true) {
-                OrientGridToMatrix(Gyros, matrix, reverse);
-                yield return null;
             }
         }
 
@@ -208,7 +186,8 @@ namespace IngameScript
             var path = route.Skip(CurrentJob.MiningJobProgress - 1).GetEnumerator();
             var start = Vector3D.Zero;
             var end = Vector3D.Zero;
-            var isLast = false;
+            var isLast = !path.MoveNext();
+            Sorters.ForEach(s => s.Enabled = false);
             while (true) {
                 if (!isLast) {
                     start = coordGrid[path.Current[0], path.Current[1]];
@@ -218,6 +197,8 @@ namespace IngameScript
                     BalanceDrillInventories();
                 switch (Stage) {
                     case MiningJobStages.None:
+                        Stage = MiningJobStages.TransitionToWork;
+                        continue;
                     case MiningJobStages.TransitionToWork:
                         var goToWorkLocation = GotoPosition("Work", WaitForUndock);
                         foreach (var _ in goToWorkLocation)
@@ -251,7 +232,7 @@ namespace IngameScript
                         var unchangedTicks = 0;
                         const int maxUnchangedTicks = 20; // 2 seconds at Update10
 
-                        while (!MoveGridToPosition(end, 2, 0.5f)) {
+                        while (!MoveGridToPosition(end, 1.5, 0.25f)) {
                             OrientGridToMatrix(Gyros, matrix);
 
                             var currentCargo = GetInventoryItemsAmountsWithoutGarbage();
@@ -298,7 +279,7 @@ namespace IngameScript
                         Sorters.ForEach(s => s.Enabled = true);
                         // if there is no some free space after 5 sec go to home to unload.
                         var timer = Task.SetTimeout(() => { }, 5);
-                        while (Task.IsRunning(timer))
+                        while (!timer.Await())
                             yield return null;
                         if (FillLevel > 98) {
                             Stage = MiningJobStages.TransitionToHome;
@@ -308,8 +289,8 @@ namespace IngameScript
                         // else wait until cargo is same for 2 sec
                         timer = Task.SetTimeout(() => { }, 2);
                         var previousFill = FillLevel;
-                        while (Task.IsRunning(timer)) {
-                            if (Math.Abs(FillLevel - previousFill) > 0.1f) {
+                        while (!timer.Await()) {
+                            if (FillLevel != previousFill) {
                                 previousFill = FillLevel;
                                 timer = Task.SetTimeout(() => { }, 2);
                             }
@@ -391,14 +372,17 @@ namespace IngameScript
                         MainMenu.ShowTransitionMenu();
                     else
                         MainMenu.ShowMiningMenu();
-                    _MainTask = Task.RunTask(MainTask()).OnDone(() => MainMenu.Back());
+                    _MainTask = Task.RunTask(MainTask()).OnDone(() => {
+                        MainMenu.Back();
+                        if (CurrentJob.Type == JobType.MiningGrinding)
+                            Drills.ForEach(d => d.Enabled = false);
+                        ResetThrusters(Thrusters.Values.SelectMany(t => t));
+                        ResetGyros();
+                    });
                 }
             }
-            else {
+            else
                 Task.StopTask(_MainTask);
-                ResetThrusters(Thrusters.Values.SelectMany(t => t));
-                ResetGyros();
-            }
             CurrentJob.Paused = !Task.IsRunning(_MainTask);
         }
 
@@ -412,14 +396,13 @@ namespace IngameScript
                         .OnDone(() => {
                             CurrentJob.CurrentDestination = name == "Home" ? "Work" : "Home";
                             MainMenu.Back();
+                            ResetThrusters(Thrusters.Values.SelectMany(t => t));
+                            ResetGyros();
                         });
                 }
             }
-            else {
+            else
                 Task.StopTask(_TransitionTask);
-                ResetThrusters(Thrusters.Values.SelectMany(t => t));
-                ResetGyros();
-            }
         }
     }
 }

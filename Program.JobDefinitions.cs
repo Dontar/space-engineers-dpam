@@ -181,10 +181,10 @@ namespace IngameScript
                 Speed = Get(Name, "Speed").ToSingle(5f);
                 MinAltitude = Get(Name, "MinAltitude").ToSingle(10f);
 
-                var dimStr = Get(Name, "Dimensions").ToString("{{X:10 Y:10 Z:10}}");
+                var dimStr = Get(Name, "Dimensions").ToString("{X:10 Y:10 Z:10}");
                 Vector3D dimVec;
-                Vector3D.TryParse(dimStr, out dimVec);
-                Dimensions = (Vector3)dimVec;
+                Vector3D.TryParse(dimStr.Trim('{', '}'), out dimVec);
+                Dimensions = dimVec;
 
                 DepthMode = (DepthMode)Get(Name, "DepthMode").ToInt32((int)DepthMode.Depth);
                 StartPosition = (StartPosition)Get(Name, "StartPosition").ToInt32((int)StartPosition.TopLeft);

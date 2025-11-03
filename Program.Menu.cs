@@ -82,35 +82,46 @@ namespace IngameScript
                 var timerActions = Enum.GetValues(typeof(TimerAction)) as TimerAction[];
                 var job = p.CurrentJob;
                 var menu = CreateMenu($"{jobType} Job Setup");
+
+                var action1 = new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true);
+                var action2 = new Item("  -Action", () => $"{job.TimerLeavingHomeAction}", (down) => job.TimerLeavingHomeAction = UpDownValue(timerActions, job.TimerLeavingHomeAction, down), true);
                 menu.AddArray(new[] {
-                    new Item("Start job", () => {//1
+                    Item.Separator,// 1
+                    new Item("Start new job", () => {// 2
                         p.CurrentJob.Type = JobType.MiningGrinding;
+                        p.CurrentJob.MiningJobStage = MiningJobStages.None;
+                        p.CurrentJob.MiningJobProgress = 0;
                         p.CurrentJob.WorkLocation = new Waypoint(p.MyMatrix, "WorkLocation");
                         p.ExecuteCommand("toggle -start");
                     }),
-                    new Item("Reset!!!", () => {//2
+                    new Item("Continue job", () => {// 3
+                        p.CurrentJob.Type = JobType.MiningGrinding;
+                        p.ExecuteCommand("toggle -start");
+                    }),
+                    Item.Separator,// 4
+                    new Item("Reset!!!", () => {// 4
                         p.ExecuteCommand("reset");
                     }),
-                    new Item("Leave Home", () => $"{job.LeaveConnector1}", (down) => job.LeaveConnector1 = UpDownValue(events, job.LeaveConnector1, down)),//3
-                    new Item("Timer: \"Docking Home\"", () => job.TimerDockingHome, (down) => {//4
+                    new Item("Leave Home", () => $"{job.LeaveConnector1}", (down) => job.LeaveConnector1 = UpDownValue(events, job.LeaveConnector1, down)),// 6
+                    new Item("Timer: \"Docking Home\"", () => job.TimerDockingHome, (down) => {// 7
                         job.TimerDockingHome = UpDownValue(timers, job.TimerDockingHome, down);
-                        menu[5].Hidden = job.TimerDockingHome == "None";
+                        action1.Hidden = job.TimerDockingHome == "None";
                     }),
-                    new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true),//5
-                    new Item("Timer: \"Leaving Home\"", () => job.TimerLeavingHome, (down) => {//6
+                    action1,
+                    new Item("Timer: \"Leaving Home\"", () => job.TimerLeavingHome, (down) => {// 9
                         job.TimerLeavingHome = UpDownValue(timers, job.TimerLeavingHome, down);
-                        menu[7].Hidden = job.TimerLeavingHome == "None";
+                        action2.Hidden = job.TimerLeavingHome == "None";
                     }),
-                    new Item("  -Action", () => $"{job.TimerLeavingHomeAction}", (down) => job.TimerLeavingHomeAction = UpDownValue(timerActions, job.TimerLeavingHomeAction, down), true),//7
-                    new Item("Width", () => $"{job.Dimensions.X}m", (down) => {//8
+                    action2,
+                    new Item("Width", () => $"{job.Dimensions.X}m", (down) => {// 11
                         job.Dimensions.X = Math.Max(1, job.Dimensions.X + down);
                         p.SetSensorDimensions(job.Dimensions);
                     }),
-                    new Item("Height", () => $"{job.Dimensions.Y}m", (down) => {
+                    new Item("Height", () => $"{job.Dimensions.Y}m", (down) => {// 12
                         job.Dimensions.Y = Math.Max(1, job.Dimensions.Y + down);
                         p.SetSensorDimensions(job.Dimensions);
                     }),
-                    new Item("Depth", () => $"{job.Dimensions.Z}m", (down) => {
+                    new Item("Depth", () => $"{job.Dimensions.Z}m", (down) => {// 13
                         job.Dimensions.Z = Math.Max(1, job.Dimensions.Z + down);
                         p.SetSensorDimensions(job.Dimensions);
                     }),
@@ -125,11 +136,12 @@ namespace IngameScript
                 var p = program;
                 var status = p.Status;
                 var job = p.CurrentJob;
-                var menu = CreateMenu("Mining/Grinding...");
+                var menu = CreateMenu("Mining/Grinding...", false);
                 menu.AddArray(new[] {
                     new Item("Abort", () => {
                         p.ExecuteCommand("toggle -stop");
                     }),
+                    Item.Separator,
                     new Item("Stage", () => $"{p.Stage}", null),
                     new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
                     new Item("Progress", () => $"{job.MiningJobProgress} / {status.MiningRouteCount}", null),

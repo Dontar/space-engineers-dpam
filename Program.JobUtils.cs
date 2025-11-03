@@ -73,30 +73,24 @@ namespace IngameScript
             var velocity = Velocities.LinearVelocity;
 
             var desiredVelocity = direction * speed;
-            var requiredAccelVec = desiredVelocity - velocity;
+            var velocityError = desiredVelocity - velocity;
 
-            // Movement force (in Newtons)
-            var moveForceVec = requiredAccelVec * Mass.PhysicalMass;
+            // Proportional gain (tune this value)
+            double k = Util.NormalizeClamp(speed, 0.1, 30, 13, 5); // Try 1.0 to 5.0 for your grid
 
-            // Gravity compensation
-            var gravityForceVec = -Gravity * Mass.PhysicalMass;
+            // Subtract gravity to get the net required thrust
+            var thrustVec = (velocityError * k - Gravity) * Mass.PhysicalMass;
 
             Controller.DampenersOverride = Thrusters.ContainsKey(Base6Directions.Direction.Down);
 
             foreach (var dir in Thrusters.Keys) {
                 var thrusterArray = Thrusters[dir];
-
                 var thrustDir = thrusterArray[0].WorldMatrix.Backward;
 
-                // Project movement and gravity forces onto thruster direction
-                var moveForce = moveForceVec.Dot(thrustDir);
-                var gravityForce = gravityForceVec.Dot(thrustDir);
-
-                // Total force needed from this thruster direction
-                var totalForce = moveForce + gravityForce;
+                var force = thrustVec.Dot(thrustDir);
 
                 var totalMaxThrust = thrusterArray.Sum(t => t.MaxThrust);
-                var thrustToApply = MathHelper.Clamp((float)totalForce, 0, totalMaxThrust);
+                var thrustToApply = MathHelper.Clamp((float)force, 0, totalMaxThrust);
 
                 foreach (var thruster in thrusterArray) {
                     var portion = thruster.MaxThrust / totalMaxThrust;
@@ -117,8 +111,13 @@ namespace IngameScript
             var right = matrix.Right;
             var up = matrix.Up;
             var forward = matrix.Forward;
-            var sizeX = (int)Math.Floor((max.X - min.X) / cellSize.X) + 1;
-            var sizeY = (int)Math.Floor((max.Y - min.Y) / cellSize.Y) + 1;
+
+            cellSize += 1f;
+            var T = MatrixD.Transpose(matrix);
+            var localMin = Vector3D.TransformNormal(min - matrix.Translation, T);
+            var localMax = Vector3D.TransformNormal(max - matrix.Translation, T);
+            var sizeX = (int)Math.Floor((localMax.X - localMin.X) / cellSize.X);
+            var sizeY = (int)Math.Floor((localMax.Y - localMin.Y) / cellSize.Y);
 
             var cells = new Vector3D[sizeY, sizeX];
 
@@ -217,7 +216,7 @@ namespace IngameScript
                     var distanceToLast = Vector3D.Distance(MyMatrix.Translation, last.Matrix.Translation);
                     if (distanceToLast < 200) {
                         Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distanceToLast, 200, CurrentJob.Speed));
-                        Status.MinDistance = (float)Math.Max(0.5, Util.NormalizeValue(distanceToLast, 100, (float)Me.CubeGrid.WorldVolume.Radius * 2f));
+                        Status.MinDistance = (float)Math.Max(0.25f, Util.NormalizeValue(distanceToLast, 100, (float)Me.CubeGrid.WorldVolume.Radius * 2f));
                     }
                     if (distanceToLast < 50)
                         OrientGridToMatrix(Gyros, last.Matrix);

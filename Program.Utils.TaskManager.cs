@@ -68,15 +68,11 @@ namespace IngameScript
                 return this;
             }
             bool ITask.Await() {
-                return TaskResult != null;
+                return TaskResult != null || !IsRunning(this);
             }
             bool ITask.Await<T>(out T result) {
-                if (TaskResult == null) {
-                    result = default(T);
-                    return false;
-                }
-                result = (T)TaskResult;
-                return true;
+                result = TaskResult != null ? (T)TaskResult : default(T);
+                return TaskResult != null || !IsRunning(this);
             }
             static List<Task> tasks = new List<Task>();
 
@@ -109,10 +105,10 @@ namespace IngameScript
                 RunTask(InternalTask(ctx => cb((Dictionary<string, object>)ctx))).Every(intervalSeconds);
 
             public static ITask SetTimeout(Action cb, float delaySeconds) =>
-                RunTask(InternalTask(_ => cb())).Once().Every(delaySeconds);
+                RunTask(InternalTask(_ => cb(), true)).Once().Every(delaySeconds);
             public static void StopTask(ITask task) {
                 tasks.Remove((Task)task);
-                ((Task)task).onDone?.Invoke();
+                ((Task)task)?.onDone?.Invoke();
             }
 
             public static bool IsRunning(ITask task) {
