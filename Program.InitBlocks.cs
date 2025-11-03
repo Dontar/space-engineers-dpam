@@ -30,15 +30,15 @@ namespace IngameScript
         List<IMyBatteryBlock> Batteries;
         double BatteriesLevel => Memo.Of("BatteryLevels", TimeSpan.FromSeconds(1.5), () => Batteries.Average(b => Util.NormalizeValue(b.CurrentStoredPower, b.MaxStoredPower, 100)));
         List<IMyInventory> DrillInventories;
-        float FillLevel => Inventories.Sum(i => i.VolumeFillFactor) / Math.Max(1, Inventories.Count) * 100;
+        float FillLevel => Inventories.Average(i => (float)Util.NormalizeValue(i.VolumeFillFactor, 1, 100));
         IMySensorBlock Sensor;
         List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => Util.GetScreens(_tag));
         List<MyItemType> Garbage => Memo.Of("Garbage", TimeSpan.FromSeconds(5), () => Sorters.SelectMany(s => {
             var list = new List<MyInventoryItemFilter>();
             s.GetFilterList(list);
             return list.Select(i => i.ItemType).Distinct();
-        }).ToList()
-        );
+        }).ToList());
+        double GarbageAmount => Memo.Of("GarbageAmount", TimeSpan.FromSeconds(2), () => GetInventoryGarbageAmount());
 
         void InitController() {
             var controllers = Util.GetBlocks<IMyRemoteControl>();
@@ -74,6 +74,7 @@ namespace IngameScript
                 .Concat(Grinders)
                 .Concat(CargoContainers)
                 .Distinct()
+                .Where(b => b.HasInventory)
                 .SelectMany(y => {
                     var result = new List<IMyInventory>();
                     for (int i = 0; i < y.InventoryCount; i++) {
@@ -89,6 +90,16 @@ namespace IngameScript
             foreach (var inv in Inventories) {
                 var items = new List<MyInventoryItem>();
                 inv.GetItems(items, item => !Garbage.Contains(item.Type));
+                total += items.Sum(i => (float)i.Amount);
+            }
+            return total;
+        }
+
+        float GetInventoryGarbageAmount() {
+            float total = 0;
+            foreach (var inv in Inventories) {
+                var items = new List<MyInventoryItem>();
+                inv.GetItems(items, item => Garbage.Contains(item.Type));
                 total += items.Sum(i => (float)i.Amount);
             }
             return total;

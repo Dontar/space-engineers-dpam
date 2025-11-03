@@ -44,12 +44,11 @@ namespace IngameScript
                 }
                 var p = program;
                 var job = p.CurrentJob;
-                PathRecordMenu = CreateMenu("Path Recording");
+                PathRecordMenu = CreateMenu("Path Recording", () => $"Recording: " + (p.Recording ? "Yes" : "No"));
                 PathRecordMenu.AddArray(new[] {
-                    new Item("Recording", () => p.Recording ? "Yes":"No", null),
-                    Item.Separator,
                     new Item("Start recording", () => p.ExecuteCommand("record -start")),
                     new Item("Stop recording", () => p.ExecuteCommand("record -stop")),
+                    Item.Separator,
                     new Item("Home", () => job.HasPath ? "Was set" : "None", null),
                     new Item("Work", () => job.HasPath && !p.Recording ? "Was set" : "None", null),
                     new Item("Path", () => $"Count: {job.Path?.Count ?? 0}", null),
@@ -69,7 +68,6 @@ namespace IngameScript
                 var action1 = new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true);
                 var action2 = new Item("  -Action", () => $"{job.TimerLeavingHomeAction}", (down) => job.TimerLeavingHomeAction = UpDownValue(timerActions, job.TimerLeavingHomeAction, down), true);
                 menu.AddArray(new[] {
-                    Item.Separator,// 1
                     new Item("Start new job", () => {// 2
                         p.CurrentJob.Type = JobType.MiningGrinding;
                         p.CurrentJob.MiningJobStage = MiningJobStages.None;

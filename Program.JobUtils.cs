@@ -6,6 +6,7 @@ using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
 using VRage;
 using VRage.Game;
+using VRage.Game.ModAPI.Ingame;
 using VRageMath;
 
 namespace IngameScript
@@ -306,14 +307,15 @@ namespace IngameScript
             }
         }
         void BalanceDrillInventories() {
-            var totalMass = DrillInventories.Sum(i => (float)i.CurrentMass);
-            var targetMass = totalMass / Math.Max(DrillInventories.Count(), 1);
+            var targetMass = DrillInventories.Average(i => (float)i.CurrentMass);
             foreach (var inv in DrillInventories) {
                 if ((float)inv.CurrentMass > targetMass) {
                     var toTransfer = (float)inv.CurrentMass - targetMass;
-                    inv.GetItems(null, item => {
+                    List<MyInventoryItem> items = new List<MyInventoryItem>();
+                    inv.GetItems(items);
+                    foreach (var item in items) {
                         if (toTransfer <= 0)
-                            return false;
+                            continue;
                         var itemMass = (float)item.Amount;
                         var amountToTransfer = MathHelper.Min((float)item.Amount, toTransfer);
                         foreach (var otherInv in DrillInventories) {
@@ -325,8 +327,7 @@ namespace IngameScript
                                     break;
                             }
                         }
-                        return false;
-                    });
+                    }
                 }
             }
         }

@@ -299,24 +299,16 @@ namespace IngameScript
 
                         // Throw garbage
                         Sorters.ForEach(s => s.Enabled = true);
-                        // if there is no some free space after 5 sec go to home to unload.
-                        timer = Task.SetTimeout(() => { }, 5);
-                        while (!timer.Await())
+                        // Wait for garbage to be 0
+                        var garbageAmount = GarbageAmount;
+                        while (garbageAmount > 0) {
+                            garbageAmount = GarbageAmount;
                             yield return null;
+                        }
                         if (FillLevel > 98) {
                             Stage = MiningJobStages.TransitionToHome;
                             Sorters.ForEach(s => s.Enabled = false);
                             continue;
-                        }
-                        // else wait until cargo is same for 3 sec
-                        timer = Task.SetTimeout(() => { }, 3);
-                        var previousFill = FillLevel;
-                        while (!timer.Await()) {
-                            if (FillLevel != previousFill) {
-                                previousFill = FillLevel;
-                                timer = Task.SetTimeout(() => { }, 3);
-                            }
-                            yield return null;
                         }
                         Sorters.ForEach(s => s.Enabled = false);
                         Stage = MiningJobStages.TransitionToShaftStart;
