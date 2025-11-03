@@ -226,7 +226,6 @@ namespace IngameScript
                 }
                 previous = currentWaypoint;
             }
-            ResetThrusters(Thrusters.Values.SelectMany(t => t));
             ResetGyros();
             if (waitForDock != null) {
                 while (!waitForDock(last.Name))
@@ -256,6 +255,8 @@ namespace IngameScript
             return false;
         }
         bool CheckConnectorCondition(string pos) {
+            if (BatteriesLevel < 15)
+                return false;
             var condition = pos == "Home" ? CurrentJob.LeaveConnector1 : CurrentJob.LeaveConnector2;
             switch (condition) {
                 case EventEnum.ShipIsEmpty:
@@ -308,12 +309,12 @@ namespace IngameScript
             var totalMass = DrillInventories.Sum(i => (float)i.CurrentMass);
             var targetMass = totalMass / Math.Max(DrillInventories.Count(), 1);
             foreach (var inv in DrillInventories) {
-                if (inv.CurrentMass.RawValue > targetMass) {
+                if ((float)inv.CurrentMass > targetMass) {
                     var toTransfer = (float)inv.CurrentMass - targetMass;
                     inv.GetItems(null, item => {
                         if (toTransfer <= 0)
                             return false;
-                        var itemMass = item.Amount.RawValue;
+                        var itemMass = (float)item.Amount;
                         var amountToTransfer = MathHelper.Min((float)item.Amount, toTransfer);
                         foreach (var otherInv in DrillInventories) {
                             if (otherInv == inv)

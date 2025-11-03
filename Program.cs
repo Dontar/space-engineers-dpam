@@ -39,13 +39,15 @@ namespace IngameScript
             InitController();
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
-            Task.RunTask(RenderMenuTask()).Every(1.7f);
+            Task.SetInterval((_) => RenderMenu(), 1.7f);
+            _LocationTask = Task.SetInterval((_) => CurrentJob.CurrentLocation = new Waypoint(MyMatrix, "Current"), 2).Pause();
             ToggleMainTask(!CurrentJob.Paused);
         }
 
         ITask _LogoTask;
         ITask _MainTask;
         ITask _TransitionTask;
+        ITask _LocationTask;
         MyCommandLine Cmd = new MyCommandLine();
         Queue<string> commandQueue = new Queue<string>();
 
@@ -136,10 +138,6 @@ namespace IngameScript
                     result.Append(PathToGps());
                     Me.CustomData = result.ToString();
                     break;
-                case "test_4":
-                    CurrentJob.MiningJobStage = MiningJobStages.None;
-                    CurrentJob.MiningJobProgress = 0;
-                    break;
                 default:
                     if (MainMenu.ProcessMenuCommands(Cmd))
                         RenderMenu();
@@ -189,6 +187,17 @@ namespace IngameScript
             var isLast = !path.MoveNext();
             Sorters.ForEach(s => s.Enabled = false);
             ITask timer = null;
+
+            var condition = new[] { MiningJobStages.TransitionToHome, MiningJobStages.TransitionToWork, MiningJobStages.None, MiningJobStages.Done };
+            if (!condition.Contains(Stage) && CurrentJob.CurrentLocation != null) {
+                var lastPos = CurrentJob.CurrentLocation.Matrix.Translation;
+                var refDistance = Vector3D.Distance(lastPos, pos);
+                var distance = Vector3D.Distance(MyMatrix.Translation, pos);
+                if (distance > refDistance + 2) {
+                    Stage = MiningJobStages.None;
+                }
+            }
+
             while (true) {
                 if (!isLast) {
                     start = coordGrid[path.Current[0], path.Current[1]];
@@ -239,6 +248,11 @@ namespace IngameScript
                         while (!MoveGridToPosition(end, 1.5, 0.25f)) {
                             OrientGridToMatrix(Gyros, matrix);
 
+                            if (BatteriesLevel < 15) {
+                                Stage = MiningJobStages.ThrowGarbage;
+                                break;
+                            }
+
                             if (!CurrentJob.TerrainClear) {
                                 if (FillLevel > 98) {
                                     Stage = MiningJobStages.ThrowGarbage;
@@ -277,6 +291,12 @@ namespace IngameScript
                             OrientGridToMatrix(Gyros, matrix);
                             yield return null;
                         }
+
+                        if (BatteriesLevel < 15) {
+                            Stage = MiningJobStages.TransitionToHome;
+                            continue;
+                        }
+
                         // Throw garbage
                         Sorters.ForEach(s => s.Enabled = true);
                         // if there is no some free space after 5 sec go to home to unload.
@@ -288,13 +308,13 @@ namespace IngameScript
                             Sorters.ForEach(s => s.Enabled = false);
                             continue;
                         }
-                        // else wait until cargo is same for 2 sec
-                        timer = Task.SetTimeout(() => { }, 2);
+                        // else wait until cargo is same for 3 sec
+                        timer = Task.SetTimeout(() => { }, 3);
                         var previousFill = FillLevel;
                         while (!timer.Await()) {
                             if (FillLevel != previousFill) {
                                 previousFill = FillLevel;
-                                timer = Task.SetTimeout(() => { }, 2);
+                                timer = Task.SetTimeout(() => { }, 3);
                             }
                             yield return null;
                         }
@@ -306,7 +326,7 @@ namespace IngameScript
                         var goToHome = GotoPosition("Home", null, WaitForDock);
                         foreach (var _ in goToHome)
                             yield return null;
-                        Stage = MiningJobStages.TransitionToWork;
+                        Stage = MiningJobStages.None;
                         continue;
                     case MiningJobStages.Done:
                         Drills.ForEach(d => d.Enabled = false);
@@ -331,12 +351,6 @@ namespace IngameScript
                 if (s == pbScreen)
                     _LogoTask.Pause();
                 MainMenu.Render(s);
-            }
-        }
-        IEnumerable RenderMenuTask() {
-            while (true) {
-                RenderMenu();
-                yield return null;
             }
         }
 
@@ -370,6 +384,7 @@ namespace IngameScript
             if (start) {
                 if (!Task.IsRunning(_MainTask) && CurrentJob.Type != JobType.None) {
                     ToggleTransitionTask("", false);
+                    _LocationTask.Pause(false);
                     if (CurrentJob.Type == JobType.Shuttle)
                         MainMenu.ShowTransitionMenu();
                     else
@@ -380,6 +395,7 @@ namespace IngameScript
                             Drills.ForEach(d => d.Enabled = false);
                         ResetThrusters(Thrusters.Values.SelectMany(t => t));
                         ResetGyros();
+                        _LocationTask.Pause();
                     });
                 }
             }

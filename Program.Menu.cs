@@ -17,16 +17,17 @@ namespace IngameScript
                 var p = program;
                 var menu = CreateMenu("DPAM Control");
                 menu.AddArray(new[] {
+                    new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !p.CurrentJob.HasPath),
                     new Item("Record path & set home/work", () => {
                         ShowPathRecordMenu();
                     }),
                     new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => (!p.CurrentJob.HasPath && p.HasDrills) || !p.HasDrills),
                     new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), () => !p.CurrentJob.HasPath),
-                    new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !p.CurrentJob.HasPath),
                     new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !p.CurrentJob.HasPath),
                     new Item("Go to Work", () => p.ExecuteCommand("go_work"), () => !p.CurrentJob.HasPath),
-                    new Item("Behavior settings", () => ShowBehaviorMenu()),
-                    new Item("Help", () => { }),
+                    new Item("Speed limit", () => $"{p.CurrentJob.Speed} m/s", (down) => {
+                        p.CurrentJob.Speed = Math.Max(10, p.CurrentJob.Speed + down);
+                    }),
                 });
             }
 
@@ -52,24 +53,6 @@ namespace IngameScript
                     new Item("Home", () => job.HasPath ? "Was set" : "None", null),
                     new Item("Work", () => job.HasPath && !p.Recording ? "Was set" : "None", null),
                     new Item("Path", () => $"Count: {job.Path?.Count ?? 0}", null),
-                });
-            }
-
-            void ShowBehaviorMenu() {
-                var p = program;
-                var menu = CreateMenu("Behavior settings");
-                menu.AddArray(new[] {
-                    new Item("Speed limit", () => $"{p.CurrentJob.Speed} m/s", (down) => {
-                        p.CurrentJob.Speed = Math.Max(10, p.CurrentJob.Speed + down);
-                    }),
-                    new Item("Min. altitude", () => $"{p.CurrentJob.MinAltitude} m", (down) => {
-                        p.CurrentJob.MinAltitude = Math.Max(0, p.CurrentJob.MinAltitude + down);
-                    }),
-                    new  Item("When done", () => { }),
-                    new  Item("On damage", () => { }),
-                    new  Item("Weight limit", () => { }),
-                    new  Item("Toggle sorters", () => { }),
-                    new  Item("  -Ejection pos", () => { }),
                 });
             }
 

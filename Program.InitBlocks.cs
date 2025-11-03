@@ -27,6 +27,8 @@ namespace IngameScript
         List<IMyCargoContainer> CargoContainers;
         List<IMyGyro> Gyros;
         List<IMyInventory> Inventories;
+        List<IMyBatteryBlock> Batteries;
+        double BatteriesLevel => Memo.Of("BatteryLevels", TimeSpan.FromSeconds(1.5), () => Batteries.Average(b => Util.NormalizeValue(b.CurrentStoredPower, b.MaxStoredPower, 100)));
         List<IMyInventory> DrillInventories;
         float FillLevel => Inventories.Sum(i => i.VolumeFillFactor) / Math.Max(1, Inventories.Count) * 100;
         IMySensorBlock Sensor;
@@ -61,6 +63,7 @@ namespace IngameScript
             Sensor = Util.GetBlocks<IMySensorBlock>(b => Util.IsNotIgnored(b, _ignoreTag)).FirstOrDefault();
             SetSensorDimensions(CurrentJob.Dimensions);
             DrillInventories = Drills.Select(d => d.GetInventory(0)).ToList();
+            Batteries = Util.GetBlocks<IMyBatteryBlock>(b => Util.IsNotIgnored(b, _ignoreTag));
 
             var cargoGroup = Util.GetGroupOrBlocks<IMyTerminalBlock>("Cargo");
             var cockPits = Util.GetBlocks<IMyCockpit>(b => Util.IsNotIgnored(b, _ignoreTag));

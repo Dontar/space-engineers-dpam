@@ -14,6 +14,7 @@ namespace IngameScript
                 public int DepHash;
                 public TimeSpan CreatedAt;
                 bool Time;
+                bool Ticks;
 
                 public CacheValue(int depHash, object value, int age = 0) {
                     CreatedAt = Now;
@@ -21,34 +22,33 @@ namespace IngameScript
                     Value = value;
                     Age = age;
                     Time = false;
+                    Ticks = age > 0;
                 }
+
                 public CacheValue(int depHash, object value, TimeSpan age) {
                     CreatedAt = Now;
                     DepHash = depHash;
                     Value = value;
                     Age = age.Ticks;
                     Time = true;
+                    Ticks = false;
                 }
 
                 public bool Decay() {
                     if (Time) {
-                        if (Now - CreatedAt >= TimeSpan.FromTicks(Age))
-                            return false;
-                        return true;
+                        return Now - CreatedAt <= TimeSpan.FromTicks(Age);
                     }
-                    if (Age-- > 0)
-                        return true;
-                    return false;
+                    else if (Ticks)
+                        return Age-- > 0;
+                    return true;
                 }
             }
 
-            static readonly Dictionary<string, CacheValue> _dependencyCache = new Dictionary<string, CacheValue>();
-            static readonly Queue<string> _cacheOrder = new Queue<string>();
+            static Dictionary<string, CacheValue> _dependencyCache = new Dictionary<string, CacheValue>();
+            static Queue<string> _cacheOrder = new Queue<string>();
             const int MaxCacheSize = 1000;
 
             static int GetDepHash(object dep) {
-                if (dep is int)
-                    return (int)dep;
                 if (dep is object[]) {
                     var arr = (object[])dep;
                     unchecked {
@@ -71,7 +71,7 @@ namespace IngameScript
 
                 CacheValue value;
                 if (_dependencyCache.TryGetValue(cacheKey, out value)) {
-                    bool isNotStale = dep is int ? value.Decay() : value.DepHash == depHash;
+                    bool isNotStale = value.DepHash == depHash && value.Decay();
                     if (isNotStale)
                         return value.Value;
                 }

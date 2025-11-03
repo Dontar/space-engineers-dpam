@@ -141,6 +141,7 @@ namespace IngameScript
         class JobDefinition : MyIni
         {
             public string Name;
+            public Waypoint CurrentLocation;
             public bool Paused;
             public List<Waypoint> Path;
             public bool HasPath => Path != null && Path.Count > 0;
@@ -174,11 +175,13 @@ namespace IngameScript
                 Name = name;
                 Paused = Get(Name, "Paused").ToBoolean(true);
 
+                CurrentLocation = Waypoint.FromString(Get(Name, "CurrentLocation").ToString(""));
+
                 var pathData = Get(Name, "Path").ToString("");
                 Path = Waypoint.FromData(pathData, "|");
 
                 Type = (JobType)Get(Name, "Type").ToInt32((int)JobType.None);
-                Speed = Get(Name, "Speed").ToSingle(5f);
+                Speed = Get(Name, "Speed").ToSingle(30f);
                 MinAltitude = Get(Name, "MinAltitude").ToSingle(10f);
 
                 var dimStr = Get(Name, "Dimensions").ToString("{X:10 Y:10 Z:10}");
@@ -215,6 +218,7 @@ namespace IngameScript
             }
 
             public string Save() {
+                Set(Name, "CurrentLocation", CurrentLocation != null ? CurrentLocation.ToString() : "");
                 Set(Name, "Paused", Paused);
                 Set(Name, "Path", Path != null ? Waypoint.ToData(Path, "|") : "");
                 Set(Name, "Type", (int)Type);
