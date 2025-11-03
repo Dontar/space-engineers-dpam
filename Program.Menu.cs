@@ -136,13 +136,12 @@ namespace IngameScript
                 var p = program;
                 var status = p.Status;
                 var job = p.CurrentJob;
-                var menu = CreateMenu("Mining/Grinding...", false);
+                var menu = CreateMenu("Mining/Grinding...", false, () => $"Stage: {p.Stage}");
                 menu.AddArray(new[] {
                     new Item("Abort", () => {
                         p.ExecuteCommand("toggle -stop");
                     }),
                     Item.Separator,
-                    new Item("Stage", () => $"{p.Stage}", null),
                     new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
                     new Item("Progress", () => $"{job.MiningJobProgress} / {status.MiningRouteCount}", null),
                 });

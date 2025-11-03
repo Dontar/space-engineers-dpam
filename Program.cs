@@ -188,6 +188,7 @@ namespace IngameScript
             var end = Vector3D.Zero;
             var isLast = !path.MoveNext();
             Sorters.ForEach(s => s.Enabled = false);
+            ITask timer = null;
             while (true) {
                 if (!isLast) {
                     start = coordGrid[path.Current[0], path.Current[1]];
@@ -228,33 +229,34 @@ namespace IngameScript
                             d.Enabled = true;
                         });
                         // then start digging shaft
-                        var previousCargo = GetInventoryItemsAmountsWithoutGarbage();
-                        var unchangedTicks = 0;
-                        const int maxUnchangedTicks = 20; // 2 seconds at Update10
+                        float previousCargo = 0;
+
+                        if (!CurrentJob.TerrainClear && CurrentJob.DepthMode == DepthMode.Auto) {
+                            previousCargo = GetInventoryItemsAmountsWithoutGarbage();
+                            timer = Task.SetTimeout(() => { }, 5);
+                        }
 
                         while (!MoveGridToPosition(end, 1.5, 0.25f)) {
                             OrientGridToMatrix(Gyros, matrix);
 
-                            var currentCargo = GetInventoryItemsAmountsWithoutGarbage();
-                            if (FillLevel > 98) {
-                                Stage = MiningJobStages.ThrowGarbage;
-                                break;
-                            }
+                            if (!CurrentJob.TerrainClear) {
+                                if (FillLevel > 98) {
+                                    Stage = MiningJobStages.ThrowGarbage;
+                                    break;
+                                }
 
-                            if (CurrentJob.DepthMode == DepthMode.Auto) {
-                                if (Math.Abs(currentCargo - previousCargo) < 0.01f) {
-                                    unchangedTicks++;
-                                    if (unchangedTicks >= maxUnchangedTicks) {
-                                        // Shaft exhausted, move to next
-                                        break;
+                                if (CurrentJob.DepthMode == DepthMode.Auto) {
+                                    var currentCargo = GetInventoryItemsAmountsWithoutGarbage();
+                                    if (timer != null && timer.Await()) {
+                                        if (currentCargo != previousCargo) {
+                                            timer = Task.SetTimeout(() => { }, 5);
+                                            previousCargo = currentCargo;
+                                        }
+                                        else
+                                            break;
                                     }
                                 }
-                                else {
-                                    unchangedTicks = 0;
-                                }
-                                previousCargo = currentCargo;
                             }
-
                             yield return null;
                         }
                         while (!MoveGridToPosition(start, 5, 0.5f)) {
@@ -278,7 +280,7 @@ namespace IngameScript
                         // Throw garbage
                         Sorters.ForEach(s => s.Enabled = true);
                         // if there is no some free space after 5 sec go to home to unload.
-                        var timer = Task.SetTimeout(() => { }, 5);
+                        timer = Task.SetTimeout(() => { }, 5);
                         while (!timer.Await())
                             yield return null;
                         if (FillLevel > 98) {

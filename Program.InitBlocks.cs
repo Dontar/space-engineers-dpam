@@ -31,11 +31,12 @@ namespace IngameScript
         float FillLevel => Inventories.Sum(i => i.VolumeFillFactor) / Math.Max(1, Inventories.Count) * 100;
         IMySensorBlock Sensor;
         List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => Util.GetScreens(_tag));
-        List<MyItemType> Garbage => Sorters.SelectMany(s => {
+        List<MyItemType> Garbage => Memo.Of("Garbage", TimeSpan.FromSeconds(5), () => Sorters.SelectMany(s => {
             var list = new List<MyInventoryItemFilter>();
             s.GetFilterList(list);
             return list.Select(i => i.ItemType).Distinct();
-        }).ToList();
+        }).ToList()
+        );
 
         void InitController() {
             var controllers = Util.GetBlocks<IMyRemoteControl>();
@@ -61,14 +62,23 @@ namespace IngameScript
             SetSensorDimensions(CurrentJob.Dimensions);
             DrillInventories = Drills.Select(d => d.GetInventory(0)).ToList();
 
-            Inventories = Enumerable.Concat<IMyTerminalBlock>(Connectors, Drills).Concat(Grinders).Concat(CargoContainers).SelectMany(y => {
-                var result = new List<IMyInventory>();
-                for (int i = 0; i < y.InventoryCount; i++) {
-                    var inv = y.GetInventory(i);
-                    result.Add(inv);
-                }
-                return result;
-            }).ToList();
+            var cargoGroup = Util.GetGroupOrBlocks<IMyTerminalBlock>("Cargo");
+            var cockPits = Util.GetBlocks<IMyCockpit>(b => Util.IsNotIgnored(b, _ignoreTag));
+            Inventories = cargoGroup
+                .Concat(cockPits)
+                .Concat(Drills)
+                .Concat(Connectors)
+                .Concat(Grinders)
+                .Concat(CargoContainers)
+                .Distinct()
+                .SelectMany(y => {
+                    var result = new List<IMyInventory>();
+                    for (int i = 0; i < y.InventoryCount; i++) {
+                        var inv = y.GetInventory(i);
+                        result.Add(inv);
+                    }
+                    return result;
+                }).ToList();
         }
 
         float GetInventoryItemsAmountsWithoutGarbage() {

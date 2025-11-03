@@ -52,11 +52,13 @@ namespace IngameScript
                 int _selectedOption = 0;
                 int _activeOption = -1;
                 string _title;
+                Func<string> _footer;
                 Item Item => this[_selectedOption];
                 Item AItem => this[_activeOption];
 
-                public Menu(string title) : base() {
+                public Menu(string title, Func<string> footer = null) : base() {
                     _title = title;
+                    _footer = footer;
                 }
 
                 public void Up() {
@@ -112,8 +114,15 @@ namespace IngameScript
                         output.Add(string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + label + sep, value ?? ""));
                     }
 
-                    output.AddRange(Enumerable.Repeat("", screenLines - output.Count));
+                    var footer = new List<string>();
+                    if (_footer != null) {
+                        footer.Add(string.Join("", Enumerable.Repeat("-", screenColumns)));
+                        footer.Add(_footer.Invoke());
+                    }
+
+                    output.AddRange(Enumerable.Repeat("", screenLines - output.Count - footer.Count));
                     screenColumns = Util.ScreenColumns(screen, '-');
+                    output.AddRange(footer);
                     output.Add(string.Join("", Enumerable.Repeat("-", screenColumns)));
                     screen.WriteText(string.Join(Environment.NewLine, output));
                 }
@@ -135,8 +144,11 @@ namespace IngameScript
             }
             public void Render(IMyTextSurface screen) => menuStack.Peek().Render(screen);
 
-            protected Menu CreateMenu(string title, bool createBack = true) {
-                var menu = new Menu(title);
+            protected Menu CreateMenu(string title) => CreateMenu(title, true, null);
+            protected Menu CreateMenu(string title, bool createBack) => CreateMenu(title, createBack, null);
+            protected Menu CreateMenu(string title, Func<string> footer = null) => CreateMenu(title, true, footer);
+            protected Menu CreateMenu(string title, bool createBack, Func<string> footer) {
+                var menu = new Menu(title, footer);
                 if (menuStack.Count > 0 && createBack) {
                     menu.Add(new Item("< Back", Back));
                 }
