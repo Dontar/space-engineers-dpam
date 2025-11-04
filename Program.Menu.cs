@@ -21,12 +21,15 @@ namespace IngameScript
                     new Item("Record path & set home/work", () => {
                         ShowPathRecordMenu();
                     }),
-                    new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => (!p.CurrentJob.HasPath && p.HasDrills) || !p.HasDrills),
+                    new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => !(p.HasDrills && p.CurrentJob.HasPath)),
                     new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), () => !p.CurrentJob.HasPath),
                     new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !p.CurrentJob.HasPath),
                     new Item("Go to Work", () => p.ExecuteCommand("go_work"), () => !p.CurrentJob.HasPath),
                     new Item("Speed limit", () => $"{p.CurrentJob.Speed} m/s", (down) => {
                         p.CurrentJob.Speed = Math.Max(10, p.CurrentJob.Speed + down);
+                    }),
+                    new Item("Work Speed", () => $"{p.CurrentJob.WorkSpeed} m/s", (down) => {
+                        p.CurrentJob.Speed = Math.Max(10, p.CurrentJob.WorkSpeed + down);
                     }),
                 });
             }
@@ -123,8 +126,10 @@ namespace IngameScript
                         p.ExecuteCommand("toggle -stop");
                     }),
                     Item.Separator,
-                    new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
-                    new Item("Progress", () => $"{job.MiningJobProgress} / {status.MiningRouteCount}", null),
+                    new Item("All Cargo", () => $"{p.FillLevel:F1} %", null),
+                    new Item("Ore", () => $"{p.OreAmount:F1} kg", null),
+                    new Item("Garbage", () => $"{p.GarbageAmount:F1} kg", null),
+                    new Item("Progress", () => $"{job.MiningJobProgress} / {status.MiningRouteCount} shafts", null),
                 });
             }
 
@@ -174,7 +179,15 @@ namespace IngameScript
                 }
                 var p = program;
                 var status = p.Status;
-                TransitionMenu = CreateMenu("Transitioning...", false);
+                TransitionMenu = CreateMenu("Transitioning...", false, () => {
+                    var stage = p.Status.ShuttleStage;
+                    var connectorEvent = "";
+                    if (stage == ShuttleStages.WaitFor) {
+                        var conEvent = p.CurrentJob.CurrentPosition == "Home" ? p.CurrentJob.LeaveConnector1 : p.CurrentJob.LeaveConnector2;
+                        connectorEvent = $" {conEvent}";
+                    }
+                    return $"Status: {stage}{connectorEvent}";
+                });
                 TransitionMenu.AddArray(new[] {
                     new Item("Abort", () => {
                         p.ExecuteCommand("toggle -stop");
@@ -185,8 +198,8 @@ namespace IngameScript
                         var distance = Vector3D.Distance(p.MyMatrix.Translation, status.Destination?.Matrix.Translation ?? Vector3D.Zero);
                         return $"{distance:F1} m";
                     }, null),
-                    new Item("Min speed", () => $"{status.Speed} m/s", null),
-                    new Item("Min distance", () => $"{status.MinDistance} m", null),
+                    new Item("Min speed", () => $"{status.Speed:F1} m/s", null),
+                    new Item("Min distance", () => $"{status.MinDistance:F1} m", null),
                     new Item("Cur. Waypoint", () => $"{status.Current?.Name ?? ""}", null),
                     new Item("Waypoints", () => $"{status.Count}", null),
                     new Item("Waypoints Left", () => $"{status.Left}", null),

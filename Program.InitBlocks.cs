@@ -31,6 +31,7 @@ namespace IngameScript
         double BatteriesLevel => Memo.Of("BatteryLevels", TimeSpan.FromSeconds(1.5), () => Batteries.Average(b => Util.NormalizeValue(b.CurrentStoredPower, b.MaxStoredPower, 100)));
         List<IMyInventory> DrillInventories;
         float FillLevel => Inventories.Average(i => (float)Util.NormalizeValue(i.VolumeFillFactor, 1, 100));
+        float OreAmount => Memo.Of("OreAmount", TimeSpan.FromSeconds(2), () => GetInventoryItemsAmountsWithoutGarbage());
         IMySensorBlock Sensor;
         List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => Util.GetScreens(_tag));
         List<MyItemType> Garbage => Memo.Of("Garbage", TimeSpan.FromSeconds(5), () => Sorters.SelectMany(s => {

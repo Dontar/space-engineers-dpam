@@ -48,6 +48,7 @@ namespace IngameScript
         ITask _MainTask;
         ITask _TransitionTask;
         ITask _LocationTask;
+        ITask _AlignTask;
         MyCommandLine Cmd = new MyCommandLine();
         Queue<string> commandQueue = new Queue<string>();
 
@@ -127,10 +128,21 @@ namespace IngameScript
                     commandQueue.Enqueue("Undock");
                     break;
                 case "go_home":
+                    ExecuteCommand("toggle -stop");
                     ToggleTransitionTask("Home", true);
                     break;
                 case "go_work":
+                    ExecuteCommand("toggle -stop");
                     ToggleTransitionTask("Work", true);
+                    break;
+                case "balance":
+                    BalanceDrillInventories();
+                    break;
+                case "align":
+                    if (!Task.IsRunning(_AlignTask))
+                        _AlignTask = Task.RunTask(AlignToGravity()).Once().OnDone(() => ResetGyros());
+                    else
+                        Task.StopTask(_AlignTask);
                     break;
                 case "debug":
                     var result = new StringBuilder(Storage);
@@ -203,8 +215,6 @@ namespace IngameScript
                     start = coordGrid[path.Current[0], path.Current[1]];
                     end = start + forward * (CurrentJob.DepthMode == DepthMode.Depth ? CurrentJob.Dimensions.Z : 50);
                 }
-                if (CurrentJob.BalanceDrills)
-                    BalanceDrillInventories();
                 switch (Stage) {
                     case MiningJobStages.None:
                         Stage = MiningJobStages.TransitionToWork;
@@ -241,17 +251,20 @@ namespace IngameScript
                         float previousCargo = 0;
 
                         if (!CurrentJob.TerrainClear && CurrentJob.DepthMode == DepthMode.Auto) {
-                            previousCargo = GetInventoryItemsAmountsWithoutGarbage();
+                            previousCargo = OreAmount;
                             timer = Task.SetTimeout(() => { }, 5);
                         }
 
-                        while (!MoveGridToPosition(end, 1.5, 0.25f)) {
+                        while (!MoveGridToPosition(end, CurrentJob.WorkSpeed, 0.25f)) {
                             OrientGridToMatrix(Gyros, matrix);
 
                             if (BatteriesLevel < 15) {
                                 Stage = MiningJobStages.ThrowGarbage;
                                 break;
                             }
+
+                            if (CurrentJob.BalanceDrills)
+                                BalanceDrillInventories();
 
                             if (!CurrentJob.TerrainClear) {
                                 if (FillLevel > 98) {
@@ -260,7 +273,7 @@ namespace IngameScript
                                 }
 
                                 if (CurrentJob.DepthMode == DepthMode.Auto) {
-                                    var currentCargo = GetInventoryItemsAmountsWithoutGarbage();
+                                    var currentCargo = OreAmount;
                                     if (timer != null && timer.Await()) {
                                         if (currentCargo != previousCargo) {
                                             timer = Task.SetTimeout(() => { }, 5);
@@ -291,26 +304,31 @@ namespace IngameScript
                             OrientGridToMatrix(Gyros, matrix);
                             yield return null;
                         }
+                        while (!OrientGridToMatrix(Gyros, GetAlignedMatrix()))
+                            yield return null;
+                        ResetGyros();
 
                         if (BatteriesLevel < 15) {
                             Stage = MiningJobStages.TransitionToHome;
                             continue;
                         }
 
-                        // Throw garbage
-                        Sorters.ForEach(s => s.Enabled = true);
-                        // Wait for garbage to be 0
-                        var garbageAmount = GarbageAmount;
-                        while (garbageAmount > 0) {
-                            garbageAmount = GarbageAmount;
-                            yield return null;
+                        if (Sorters.Count > 0) {
+                            // Throw garbage
+                            Sorters.ForEach(s => s.Enabled = true);
+                            // Wait for garbage to be 0
+                            var garbageAmount = GarbageAmount;
+                            while (garbageAmount > 0) {
+                                garbageAmount = GarbageAmount;
+                                yield return null;
+                            }
+                            Sorters.ForEach(s => s.Enabled = false);
                         }
                         if (FillLevel > 98) {
                             Stage = MiningJobStages.TransitionToHome;
                             Sorters.ForEach(s => s.Enabled = false);
                             continue;
                         }
-                        Sorters.ForEach(s => s.Enabled = false);
                         Stage = MiningJobStages.TransitionToShaftStart;
                         continue;
                     case MiningJobStages.TransitionToHome:
@@ -402,7 +420,14 @@ namespace IngameScript
                     ToggleMainTask(false);
                     CurrentJob.CurrentDestination = name;
                     MainMenu.ShowTransitionMenu();
-                    _TransitionTask = Task.RunTask(GotoPosition(name)).Once()
+                    _TransitionTask = Task.RunTask(GotoPosition(name, (pos) => {
+                        IMyShipConnector connector;
+                        if (IsConnectedOrReady(out connector)) {
+                            connector.Disconnect();
+                            OnUnDockTimers(pos);
+                        }
+                        return true;
+                    }, WaitForDock)).Once()
                         .OnDone(() => {
                             CurrentJob.CurrentDestination = name == "Home" ? "Work" : "Home";
                             MainMenu.Back();

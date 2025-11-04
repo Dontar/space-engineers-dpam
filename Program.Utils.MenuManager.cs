@@ -103,7 +103,7 @@ namespace IngameScript
 
                     for (int i = start; i < Math.Min(Count, start + pageSize); i++) {
                         var item = this[i];
-                        if (item.Hidden)
+                        if (item.UpdateHidden?.Invoke() ?? item.Hidden)
                             continue;
                         var label = item.Type == ItemType.Separator ? string.Join("", Enumerable.Repeat("-", screenColumns)) : item.Label;
                         var value = item.Value?.Invoke();

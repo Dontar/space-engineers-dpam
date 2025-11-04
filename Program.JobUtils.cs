@@ -39,7 +39,7 @@ namespace IngameScript
             return (float)(Math.Min(force + torqueAccel, maxForce) / maxForce);
         }
 
-        void OrientGridToMatrix(IEnumerable<IMyGyro> gyros, MatrixD alignTo, bool revert = false) {
+        bool OrientGridToMatrix(IEnumerable<IMyGyro> gyros, MatrixD alignTo, bool revert = false) {
             var myMatrix = Controller.WorldMatrix;
             var down = alignTo.Down;
             var forward = revert ? alignTo.Backward : alignTo.Forward;
@@ -50,6 +50,19 @@ namespace IngameScript
             var power = CalcRequiredGyroForce(gyros, 30 * MathHelper.RPMToRadiansPerSecond, 5);
 
             Util.ApplyGyroOverride(pitch, yaw, -roll, power, gyros, Controller.WorldMatrix);
+            return Math.Abs(roll) < 0.01 && Math.Abs(pitch) < 0.01 && Math.Abs(yaw) < 0.01;
+        }
+
+        MatrixD GetAlignedMatrix() {
+            var forward = MyMatrix.Forward * 5;
+            var gravity = -Gravity;
+            return MatrixD.CreateWorld(MyMatrix.Translation, Vector3D.ProjectOnPlane(ref forward, ref gravity), gravity);
+        }
+
+        IEnumerable AlignToGravity() {
+            var matrix = GetAlignedMatrix();
+            while (!OrientGridToMatrix(Gyros, matrix))
+                yield return null;
         }
 
         void ResetGyros() {
@@ -77,7 +90,7 @@ namespace IngameScript
             var velocityError = desiredVelocity - velocity;
 
             // Proportional gain (tune this value)
-            double k = Util.NormalizeClamp(speed, 0.1, 30, 13, 5); // Try 1.0 to 5.0 for your grid
+            double k = Util.NormalizeClamp(speed, 0.1, 30, 13, 1); // Try 1.0 to 5.0 for your grid
 
             // Subtract gravity to get the net required thrust
             var thrustVec = (velocityError * k - Gravity) * Mass.PhysicalMass;
@@ -209,11 +222,17 @@ namespace IngameScript
 
             Status.MinDistance = (float)Me.CubeGrid.WorldVolume.Radius * 2f;
             Status.Speed = CurrentJob.Speed;
+            Status.ShuttleStage = pos == "Home" ? ShuttleStages.TransitionToHome : ShuttleStages.TransitioningToWork;
             for (var i = pathIdx; i < path.Count; i++) {
                 var currentWaypoint = path[i];
                 Status.Current = currentWaypoint;
                 Status.Left = path.Count - 1 - i;
                 while (!MoveGridToPosition(currentWaypoint.Matrix.Translation, Status.Speed, Status.MinDistance)) {
+                    var distanceToFirst = Vector3D.Distance(MyMatrix.Translation, path[0].Matrix.Translation);
+                    if (distanceToFirst < 200) {
+                        Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distanceToFirst, 200, CurrentJob.Speed));
+                        Status.MinDistance = (float)Math.Max(0.25f, Util.NormalizeValue(distanceToFirst, 100, (float)Me.CubeGrid.WorldVolume.Radius * 2f));
+                    }
                     var distanceToLast = Vector3D.Distance(MyMatrix.Translation, last.Matrix.Translation);
                     if (distanceToLast < 200) {
                         Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distanceToLast, 200, CurrentJob.Speed));
@@ -222,7 +241,7 @@ namespace IngameScript
                     if (distanceToLast < 50)
                         OrientGridToMatrix(Gyros, last.Matrix);
                     else
-                        OrientGridToMatrix(Gyros, previous.Matrix, pos == "Home");
+                        OrientGridToMatrix(Gyros, previous.Matrix, pos == "Home" && previous != path[0]);
                     yield return null;
                 }
                 previous = currentWaypoint;
@@ -233,6 +252,7 @@ namespace IngameScript
                     yield return null;
 
             }
+            Status.ShuttleStage = ShuttleStages.None;
         }
         bool WaitForUndock(string pos) {
             IMyShipConnector connector;
@@ -258,6 +278,7 @@ namespace IngameScript
         bool CheckConnectorCondition(string pos) {
             if (BatteriesLevel < 15)
                 return false;
+            Status.ShuttleStage = ShuttleStages.WaitFor;
             var condition = pos == "Home" ? CurrentJob.LeaveConnector1 : CurrentJob.LeaveConnector2;
             switch (condition) {
                 case EventEnum.ShipIsEmpty:
@@ -311,21 +332,17 @@ namespace IngameScript
             foreach (var inv in DrillInventories) {
                 if ((float)inv.CurrentMass > targetMass) {
                     var toTransfer = (float)inv.CurrentMass - targetMass;
+                    if (toTransfer <= 0)
+                        continue;
                     List<MyInventoryItem> items = new List<MyInventoryItem>();
                     inv.GetItems(items);
                     foreach (var item in items) {
-                        if (toTransfer <= 0)
-                            continue;
-                        var itemMass = (float)item.Amount;
                         var amountToTransfer = MathHelper.Min((float)item.Amount, toTransfer);
-                        foreach (var otherInv in DrillInventories) {
-                            if (otherInv == inv)
-                                continue;
-                            if (inv.TransferItemTo(otherInv, item, (MyFixedPoint)amountToTransfer)) {
-                                toTransfer -= amountToTransfer;
-                                if (toTransfer <= 0)
-                                    break;
-                            }
+                        var otherInv = DrillInventories.FirstOrDefault(i => i != inv && i.CanItemsBeAdded((MyFixedPoint)amountToTransfer, item.Type));
+                        if (otherInv != null && inv.TransferItemTo(otherInv, item, (MyFixedPoint)amountToTransfer)) {
+                            toTransfer -= amountToTransfer;
+                            if (toTransfer <= 0)
+                                break;
                         }
                     }
                 }

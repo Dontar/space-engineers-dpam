@@ -136,6 +136,13 @@ namespace IngameScript
             ThrowGarbage,
             Done
         }
+        enum ShuttleStages
+        {
+            None,
+            TransitionToHome,
+            TransitioningToWork,
+            WaitFor
+        }
         #endregion
 
         class JobDefinition : MyIni
@@ -147,6 +154,7 @@ namespace IngameScript
             public bool HasPath => Path != null && Path.Count > 0;
             public JobType Type;
             public float Speed;
+            public float WorkSpeed;
             public float MinAltitude;
             public Vector3 Dimensions;
             public DepthMode DepthMode;
@@ -182,6 +190,7 @@ namespace IngameScript
 
                 Type = (JobType)Get(Name, "Type").ToInt32((int)JobType.None);
                 Speed = Get(Name, "Speed").ToSingle(30f);
+                WorkSpeed = Get(Name, "WorkSpeed").ToSingle(1f);
                 MinAltitude = Get(Name, "MinAltitude").ToSingle(10f);
 
                 var dimStr = Get(Name, "Dimensions").ToString("{X:10 Y:10 Z:10}");
@@ -223,6 +232,7 @@ namespace IngameScript
                 Set(Name, "Path", Path != null ? Waypoint.ToData(Path, "|") : "");
                 Set(Name, "Type", (int)Type);
                 Set(Name, "Speed", Speed);
+                Set(Name, "WorkSpeed", WorkSpeed);
                 Set(Name, "MinAltitude", MinAltitude);
                 Set(Name, "Dimensions", Dimensions.ToString());
                 Set(Name, "DeptMode", (int)DepthMode);
@@ -285,6 +295,7 @@ namespace IngameScript
             public double Speed;
             public float MinDistance;
             public int MiningRouteCount;
+            public ShuttleStages ShuttleStage;
         }
         JobStatus Status = new JobStatus();
 
