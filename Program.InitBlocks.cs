@@ -68,14 +68,16 @@ namespace IngameScript
 
             var cargoGroup = Util.GetGroupOrBlocks<IMyTerminalBlock>("Cargo");
             var cockPits = Util.GetBlocks<IMyCockpit>(b => Util.IsNotIgnored(b, _ignoreTag));
-            Inventories = cargoGroup
-                .Concat(cockPits)
-                .Concat(Drills)
-                .Concat(Connectors)
-                .Concat(Grinders)
-                .Concat(CargoContainers)
-                .Distinct()
-                .Where(b => b.HasInventory)
+            Inventories = (cargoGroup.Count > 0 
+                ? cargoGroup 
+                : cockPits
+                    .Concat<IMyTerminalBlock>(Drills)
+                    .Concat(Connectors)
+                    .Concat(Grinders)
+                    .Concat(CargoContainers)
+                    .Distinct()
+                    .Where(b => b.HasInventory)
+                )
                 .SelectMany(y => {
                     var result = new List<IMyInventory>();
                     for (int i = 0; i < y.InventoryCount; i++) {

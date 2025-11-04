@@ -129,6 +129,7 @@ namespace IngameScript
                     new Item("All Cargo", () => $"{p.FillLevel:F1} %", null),
                     new Item("Ore", () => $"{p.OreAmount:F1} kg", null),
                     new Item("Garbage", () => $"{p.GarbageAmount:F1} kg", null),
+                    new Item("Battery Lvl", () => $"{p.BatteriesLevel:F1} %", null),
                     new Item("Progress", () => $"{job.MiningJobProgress} / {status.MiningRouteCount} shafts", null),
                 });
             }
@@ -193,13 +194,11 @@ namespace IngameScript
                         p.ExecuteCommand("toggle -stop");
                     }),
                     new Item("Destination", () => $"{status.Destination?.Name ?? ""}", null),
-                    new Item("Speed", () => $"{p.Velocities.LinearVelocity.Length():F1} m/s", null),
+                    new Item("Battery Lvl", () => $"{p.BatteriesLevel:F1} %", null),
                     new Item("Distance", () => {
                         var distance = Vector3D.Distance(p.MyMatrix.Translation, status.Destination?.Matrix.Translation ?? Vector3D.Zero);
                         return $"{distance:F1} m";
                     }, null),
-                    new Item("Min speed", () => $"{status.Speed:F1} m/s", null),
-                    new Item("Min distance", () => $"{status.MinDistance:F1} m", null),
                     new Item("Cur. Waypoint", () => $"{status.Current?.Name ?? ""}", null),
                     new Item("Waypoints", () => $"{status.Count}", null),
                     new Item("Waypoints Left", () => $"{status.Left}", null),
