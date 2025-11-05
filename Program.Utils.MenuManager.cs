@@ -20,7 +20,8 @@ namespace IngameScript
             {
                 public ItemType Type;
                 public string Label;
-                public bool Hidden;
+                bool _Hidden;
+                public bool Hidden => UpdateHidden?.Invoke() ?? _Hidden;
                 public Func<bool> UpdateHidden;
                 public Func<string> Value;
                 public Action Action;
@@ -32,7 +33,7 @@ namespace IngameScript
                     Value = value;
                     IncDec = incDec;
                     Action = action;
-                    Hidden = hidden;
+                    _Hidden = hidden;
                     UpdateHidden = updateHidden;
                 }
                 public Item(string label, Func<string> value, Action<int> incDec, bool hidden = false)
@@ -98,13 +99,17 @@ namespace IngameScript
                         string.Join("", Enumerable.Repeat("=", screenColumns))
                     };
 
+                    if (Item.Hidden)
+                        Down();
+
                     var pageSize = screenLines - 3;
                     var start = Math.Max(0, _selectedOption - pageSize / 2);
 
                     for (int i = start; i < Math.Min(Count, start + pageSize); i++) {
                         var item = this[i];
-                        if (item.UpdateHidden?.Invoke() ?? item.Hidden)
+                        if (item.Hidden) {
                             continue;
+                        }
                         var label = item.Type == ItemType.Separator ? string.Join("", Enumerable.Repeat("-", screenColumns)) : item.Label;
                         var value = item.Value?.Invoke();
                         var sep = value != null ? ":" : "";

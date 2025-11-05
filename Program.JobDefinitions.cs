@@ -257,26 +257,7 @@ namespace IngameScript
             }
 
             public void Reset() {
-                Path.Clear();
-                WorkLocation = null;
-                Type = JobType.None;
-                Dimensions = Vector3.Zero;
-                DepthMode = DepthMode.Depth;
-                StartPosition = StartPosition.TopLeft;
-                MiningJobStage = MiningJobStages.None;
-                TerrainClear = false;
-                BalanceDrills = true;
-                CurrentDestination = "Work";
-                LeaveConnector1 = EventEnum.UndockCommand;
-                LeaveConnector2 = EventEnum.UndockCommand;
-                TimerDockingHome = "None";
-                TimerLeavingHome = "None";
-                TimerDockingWork = "None";
-                TimerLeavingWork = "None";
-                TimerDockingHomeAction = TimerAction.Trigger;
-                TimerLeavingHomeAction = TimerAction.Trigger;
-                TimerDockingWorkAction = TimerAction.Trigger;
-                TimerLeavingWorkAction = TimerAction.Trigger;
+                Load("", "Default");
             }
 
             public JobDefinition(string name, string data) {
