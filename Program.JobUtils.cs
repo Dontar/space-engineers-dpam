@@ -75,11 +75,11 @@ namespace IngameScript
             }
         }
 
-        bool MoveGridToPosition(Vector3D position, double speed, float minDistance) {
+        bool MoveGridToPosition(Vector3D position, double speed, float minDistance, bool reset = true) {
             var toTarget = position - MyMatrix.Translation;
             var distance = toTarget.Length();
             if (distance < minDistance) {
-                ResetThrusters(Thrusters.Values.SelectMany(v => v));
+                if (reset) ResetThrusters(Thrusters.Values.SelectMany(v => v));
                 return true;
             }
 
@@ -196,13 +196,17 @@ namespace IngameScript
             return new BoundingBox(min, max);
         }
 
-        IEnumerable GotoPosition(string pos, Func<string, bool> waitForUndock = null, Func<string, bool> waitForDock = null) {
+        IEnumerable GotoPosition(Func<string, bool> waitForUndock = null, Func<string, bool> waitForDock = null) {
             var currentPosition = MyMatrix.Translation;
+            var job = CurrentJob;
             if ((CurrentJob.Path?.Count ?? 0) == 0)
                 yield break;
             var path = new List<Waypoint>(CurrentJob.Path);
-            if (pos == "Home")
+
+            if (new[] { ShuttleStages.AtWork, ShuttleStages.TransitionToHome }.Contains(job.ShuttleStage)) {
                 path.Reverse();
+            }
+
             var last = path[path.Count - 1];
             Waypoint previous = path[0];
             Status.Destination = last;
@@ -222,12 +226,12 @@ namespace IngameScript
 
             Status.MinDistance = (float)Me.CubeGrid.WorldVolume.Radius * 2f;
             Status.Speed = CurrentJob.Speed;
-            Status.ShuttleStage = pos == "Home" ? ShuttleStages.TransitionToHome : ShuttleStages.TransitioningToWork;
+            job.ShuttleStage = last.Name == "Work" ? ShuttleStages.TransitionToWork : ShuttleStages.TransitionToHome;
             for (var i = pathIdx; i < path.Count; i++) {
                 var currentWaypoint = path[i];
                 Status.Current = currentWaypoint;
                 Status.Left = path.Count - 1 - i;
-                while (!MoveGridToPosition(currentWaypoint.Matrix.Translation, Status.Speed, Status.MinDistance)) {
+                while (!MoveGridToPosition(currentWaypoint.Matrix.Translation, Status.Speed, Status.MinDistance, false)) {
                     var distanceToFirst = Vector3D.Distance(MyMatrix.Translation, path[0].Matrix.Translation);
                     if (distanceToFirst < 200) {
                         Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distanceToFirst, 200, CurrentJob.Speed));
@@ -241,18 +245,19 @@ namespace IngameScript
                     if (distanceToLast < 50)
                         OrientGridToMatrix(Gyros, last.Matrix);
                     else
-                        OrientGridToMatrix(Gyros, previous.Matrix, pos == "Home" && previous != path[0]);
+                        OrientGridToMatrix(Gyros, previous.Matrix, job.ShuttleStage == ShuttleStages.TransitionToHome && previous != path[0]);
                     yield return null;
                 }
                 previous = currentWaypoint;
             }
             ResetGyros();
+            ResetThrusters(Thrusters.Values.SelectMany(v => v));
+            job.ShuttleStage = job.ShuttleStage == ShuttleStages.TransitionToHome ? ShuttleStages.AtHome : ShuttleStages.AtWork;
             if (waitForDock != null) {
                 while (!waitForDock(last.Name))
                     yield return null;
 
             }
-            Status.ShuttleStage = ShuttleStages.None;
         }
         bool WaitForUndock(string pos) {
             IMyShipConnector connector;
@@ -278,7 +283,6 @@ namespace IngameScript
         bool CheckConnectorCondition(string pos) {
             if (BatteriesLevel < 15)
                 return false;
-            Status.ShuttleStage = ShuttleStages.WaitFor;
             var condition = pos == "Home" ? CurrentJob.LeaveConnector1 : CurrentJob.LeaveConnector2;
             switch (condition) {
                 case EventEnum.ShipIsEmpty:

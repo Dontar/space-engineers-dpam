@@ -21,7 +21,14 @@ namespace IngameScript
                 public ItemType Type;
                 public string Label;
                 bool _Hidden;
-                public bool Hidden => UpdateHidden?.Invoke() ?? _Hidden;
+                public bool Hidden {
+                    get {
+                        return UpdateHidden?.Invoke() ?? _Hidden;
+                    }
+                    set {
+                        _Hidden = value;
+                    }
+                }
                 public Func<bool> UpdateHidden;
                 public Func<string> Value;
                 public Action Action;
@@ -36,15 +43,11 @@ namespace IngameScript
                     _Hidden = hidden;
                     UpdateHidden = updateHidden;
                 }
-                public Item(string label, Func<string> value, Action<int> incDec, bool hidden = false)
-                    : this(label, value, incDec, null, hidden, null) { }
-                public Item(string label, Action action, bool hidden = false)
-                    : this(label, null, null, action, hidden, null) { }
+                public Item(string label, Func<string> value, Action<int> incDec, bool hidden = false) : this(label, value, incDec, null, hidden, null) { }
+                public Item(string label, Action action, bool hidden = false) : this(label, null, null, action, hidden, null) { }
 
-                public Item(string label, Func<string> value, Action<int> incDec, Func<bool> updateHidden)
-                    : this(label, value, incDec, null, false, updateHidden) { }
-                public Item(string label, Action action, Func<bool> updateHidden)
-                    : this(label, null, null, action, false, updateHidden) { }
+                public Item(string label, Func<string> value, Action<int> incDec, Func<bool> updateHidden) : this(label, value, incDec, null, false, updateHidden) { }
+                public Item(string label, Action action, Func<bool> updateHidden) : this(label, null, null, action, false, updateHidden) { }
                 public static Item Separator => new Item("", null) { Type = ItemType.Separator };
             }
 

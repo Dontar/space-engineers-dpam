@@ -141,6 +141,12 @@ namespace IngameScript
                 var timers = new[] { "None" }.Concat(Util.GetBlocks<IMyTimerBlock>().Select(b => b.CustomName)).ToArray();
                 var job = p.CurrentJob;
                 var menu = CreateMenu("Shuttle Job Setup");
+
+                var action1 = new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true);
+                var action2 = new Item("  -Action", () => $"{job.TimerLeavingHomeAction}", (down) => job.TimerLeavingHomeAction = UpDownValue(timerActions, job.TimerLeavingHomeAction, down), true);
+                var action3 = new Item("  -Action", () => $"{job.TimerDockingWorkAction}", (down) => job.TimerDockingWorkAction = UpDownValue(timerActions, job.TimerDockingWorkAction, down), true);
+                var action4 = new Item("  -Action", () => $"{job.TimerLeavingWorkAction}", (down) => job.TimerLeavingWorkAction = UpDownValue(timerActions, job.TimerLeavingWorkAction, down), true);
+
                 menu.AddArray(new[] {
                     new Item("Start job", () => {
                         p.CurrentJob.Type = JobType.Shuttle;
@@ -150,24 +156,24 @@ namespace IngameScript
                     new Item("Leave Work Connector", () => $"{job.LeaveConnector2}", (down) => job.LeaveConnector2 = UpDownValue(events, job.LeaveConnector2, down)),
                     new Item("Timer \"Docking Home\"", () => job.TimerDockingHome, (down) => {
                         job.TimerDockingHome = UpDownValue(timers, job.TimerDockingHome, down);
-                        menu[5].Hidden = job.TimerDockingHome == "None";
+                        action1.Hidden = job.TimerDockingHome == "None";
                     }),
-                    new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true),
+                    action1,
                     new Item("Timer \"Leaving Home\"", () => job.TimerLeavingHome, (down) => {
                         job.TimerLeavingHome = UpDownValue(timers, job.TimerLeavingHome, down);
-                        menu[7].Hidden = job.TimerLeavingHome == "None";
+                        action2.Hidden = job.TimerLeavingHome == "None";
                     }),
-                    new Item("  -Action", () => $"{job.TimerLeavingHomeAction}", (down) => job.TimerLeavingHomeAction = UpDownValue(timerActions, job.TimerLeavingHomeAction, down), true),
+                    action2,
                     new Item("Timer \"Docking Work\"", () => job.TimerDockingWork, (down) => {
                         job.TimerDockingWork = UpDownValue(timers, job.TimerDockingWork, down);
-                        menu[10].Hidden = job.TimerDockingWork == "None";
+                        action3.Hidden = job.TimerDockingWork == "None";
                     }),
-                    new Item("  -Action", () => $"{job.TimerDockingWorkAction}", (down) => job.TimerDockingWorkAction = UpDownValue(timerActions, job.TimerDockingWorkAction, down), true),
+                    action3,
                     new Item("Timer \"Leaving Work\"", () => job.TimerLeavingWork, (down) => {
                         job.TimerLeavingWork = UpDownValue(timers, job.TimerLeavingWork, down);
-                        menu[13].Hidden = job.TimerLeavingWork == "None";
+                        action4.Hidden = job.TimerLeavingWork == "None";
                     }),
-                    new Item("  -Action", () => $"{job.TimerLeavingWorkAction}", (down) => job.TimerLeavingWorkAction = UpDownValue(timerActions, job.TimerLeavingWorkAction, down), true),
+                    action4,
                 });
             }
 
@@ -179,13 +185,14 @@ namespace IngameScript
                     return;
                 }
                 var p = program;
+                var job = p.CurrentJob;
                 var status = p.Status;
                 TransitionMenu = CreateMenu("Transitioning...", false, () => {
-                    var stage = p.Status.ShuttleStage;
+                    var stage = job.ShuttleStage;
                     var connectorEvent = "";
-                    if (stage == ShuttleStages.WaitFor) {
-                        var conEvent = p.CurrentJob.CurrentPosition == "Home" ? p.CurrentJob.LeaveConnector1 : p.CurrentJob.LeaveConnector2;
-                        connectorEvent = $" {conEvent}";
+                    if (new[] { ShuttleStages.AtHome, ShuttleStages.AtWork }.Contains(stage)) {
+                        var conEvent = job.ShuttleStage == ShuttleStages.AtHome ? job.LeaveConnector1 : job.LeaveConnector2;
+                        connectorEvent = $" waiting for {conEvent}";
                     }
                     return $"Status: {stage}{connectorEvent}";
                 });

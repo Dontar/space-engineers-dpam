@@ -163,7 +163,6 @@ namespace IngameScript
                     yield break;
                 case JobType.Shuttle:
                     var task = GotoPosition(
-                        CurrentJob.CurrentDestination,
                         WaitForUndock,
                         WaitForDock
                     );
@@ -171,7 +170,6 @@ namespace IngameScript
                     foreach (var _ in task)
                         yield return null;
 
-                    CurrentJob.CurrentDestination = CurrentJob.CurrentPosition;
                     break;
                 case JobType.MiningGrinding:
                     foreach (var _ in MiningTask()) {
@@ -182,18 +180,19 @@ namespace IngameScript
         }
 
         IEnumerable MiningTask() {
-            var matrix = CurrentJob.WorkLocation.Matrix;
+            var job = CurrentJob;
+            var matrix = job.WorkLocation.Matrix;
             var pos = matrix.Translation;
-            // Calculate the work area based on CurrentJob.Dimensions
+            // Calculate the work area based on job.Dimensions
             var forward = matrix.Forward;
-            var workArea = ProjectBoxFrontOfShip(matrix, CurrentJob.Dimensions);
+            var workArea = ProjectBoxFrontOfShip(matrix, job.Dimensions);
             // Calculate Grid coordinates
             var coordGrid = GenerateWorkGridArray(matrix, workArea.Min, workArea.Max, Dimensions.Size);
             var sizeY = coordGrid.GetLength(0);
             var sizeX = coordGrid.GetLength(1);
-            var route = CurrentJob.StartPosition == StartPosition.Center ? SpiralRoute(sizeY, sizeX) : RasterRoute(sizeY, sizeX);
+            var route = job.StartPosition == StartPosition.Center ? SpiralRoute(sizeY, sizeX) : RasterRoute(sizeY, sizeX);
             Status.MiningRouteCount = route.Count();
-            var path = route.Skip(CurrentJob.MiningJobProgress - 1).GetEnumerator();
+            var path = route.Skip(job.MiningJobProgress - 1).GetEnumerator();
             var start = Vector3D.Zero;
             var end = Vector3D.Zero;
             var isLast = !path.MoveNext();
@@ -201,8 +200,8 @@ namespace IngameScript
             ITask timer = null;
 
             var condition = new[] { MiningJobStages.TransitionToHome, MiningJobStages.TransitionToWork, MiningJobStages.None, MiningJobStages.Done };
-            if (!condition.Contains(Stage) && CurrentJob.CurrentLocation != null) {
-                var lastPos = CurrentJob.CurrentLocation.Matrix.Translation;
+            if (!condition.Contains(Stage) && job.CurrentLocation != null) {
+                var lastPos = job.CurrentLocation.Matrix.Translation;
                 var refDistance = Vector3D.Distance(lastPos, pos);
                 var distance = Vector3D.Distance(MyMatrix.Translation, pos);
                 if (distance > refDistance + 2) {
@@ -213,14 +212,15 @@ namespace IngameScript
             while (true) {
                 if (!isLast) {
                     start = coordGrid[path.Current[0], path.Current[1]];
-                    end = start + forward * (CurrentJob.DepthMode == DepthMode.Depth ? CurrentJob.Dimensions.Z : 50);
+                    end = start + forward * (job.DepthMode == DepthMode.Depth ? job.Dimensions.Z : 50);
                 }
                 switch (Stage) {
                     case MiningJobStages.None:
                         Stage = MiningJobStages.TransitionToWork;
                         continue;
                     case MiningJobStages.TransitionToWork:
-                        var goToWorkLocation = GotoPosition("Work", WaitForUndock);
+                        job.ShuttleStage = ShuttleStages.TransitionToHome;
+                        var goToWorkLocation = GotoPosition(WaitForUndock, null);
                         foreach (var _ in goToWorkLocation)
                             yield return null;
                         Stage = MiningJobStages.TransitionToWorkLocation;
@@ -244,18 +244,18 @@ namespace IngameScript
 
                         // start drills
                         Drills.ForEach(d => {
-                            d.TerrainClearingMode = CurrentJob.TerrainClear;
+                            d.TerrainClearingMode = job.TerrainClear;
                             d.Enabled = true;
                         });
                         // then start digging shaft
                         float previousCargo = 0;
 
-                        if (!CurrentJob.TerrainClear && CurrentJob.DepthMode == DepthMode.Auto) {
+                        if (!job.TerrainClear && job.DepthMode == DepthMode.Auto) {
                             previousCargo = OreAmount;
                             timer = Task.SetTimeout(() => { }, 5);
                         }
 
-                        while (!MoveGridToPosition(end, CurrentJob.WorkSpeed, 0.25f)) {
+                        while (!MoveGridToPosition(end, job.WorkSpeed, 0.25f)) {
                             OrientGridToMatrix(Gyros, matrix);
 
                             if (BatteriesLevel < 15) {
@@ -263,16 +263,16 @@ namespace IngameScript
                                 break;
                             }
 
-                            if (CurrentJob.BalanceDrills)
+                            if (job.BalanceDrills)
                                 BalanceDrillInventories();
 
-                            if (!CurrentJob.TerrainClear) {
+                            if (!job.TerrainClear) {
                                 if (FillLevel > 98) {
                                     Stage = MiningJobStages.ThrowGarbage;
                                     break;
                                 }
 
-                                if (CurrentJob.DepthMode == DepthMode.Auto) {
+                                if (job.DepthMode == DepthMode.Auto) {
                                     var currentCargo = OreAmount;
                                     if (timer != null && timer.Await()) {
                                         if (currentCargo != previousCargo) {
@@ -293,7 +293,7 @@ namespace IngameScript
                         if (Stage == MiningJobStages.ThrowGarbage)
                             continue;
                         isLast = !path.MoveNext();
-                        CurrentJob.MiningJobProgress++;
+                        job.MiningJobProgress++;
                         Stage = MiningJobStages.TransitionToShaftStart;
                         if (isLast)
                             Stage = MiningJobStages.Done;
@@ -333,7 +333,8 @@ namespace IngameScript
                         continue;
                     case MiningJobStages.TransitionToHome:
                         Drills.ForEach(d => d.Enabled = false);
-                        var goToHome = GotoPosition("Home", null, WaitForDock);
+                        job.ShuttleStage = ShuttleStages.TransitionToHome;
+                        var goToHome = GotoPosition(waitForUndock: null, waitForDock: WaitForDock);
                         foreach (var _ in goToHome)
                             yield return null;
                         Stage = MiningJobStages.None;
@@ -344,12 +345,13 @@ namespace IngameScript
                             OrientGridToMatrix(Gyros, matrix);
                             yield return null;
                         }
-                        foreach (var _ in GotoPosition("Home", null, WaitForDock))
+                        job.ShuttleStage = ShuttleStages.TransitionToHome;
+                        foreach (var _ in GotoPosition(waitForUndock: null, waitForDock: WaitForDock))
                             yield return null;
 
                         ToggleMainTask(false);
                         Stage = MiningJobStages.None;
-                        CurrentJob.MiningJobProgress = 0;
+                        job.MiningJobProgress = 0;
                         yield break;
                 }
             }
@@ -387,7 +389,7 @@ namespace IngameScript
             }
 
             CurrentJob.Path.Add(new Waypoint(MyMatrix, $"Work"));
-            CurrentJob.CurrentDestination = "Home";
+            CurrentJob.ShuttleStage = ShuttleStages.AtWork;
         }
 
         void ToggleMainTask(bool start) {
@@ -417,10 +419,10 @@ namespace IngameScript
         void ToggleTransitionTask(string name, bool start) {
             if (start) {
                 if (!Task.IsRunning(_TransitionTask)) {
+                    CurrentJob.ShuttleStage = name == "Home" ? ShuttleStages.TransitionToHome : ShuttleStages.TransitionToWork;
                     ToggleMainTask(false);
-                    CurrentJob.CurrentDestination = name;
                     MainMenu.ShowTransitionMenu();
-                    _TransitionTask = Task.RunTask(GotoPosition(name, (pos) => {
+                    _TransitionTask = Task.RunTask(GotoPosition((pos) => {
                         IMyShipConnector connector;
                         if (IsConnectedOrReady(out connector)) {
                             connector.Disconnect();
@@ -429,7 +431,6 @@ namespace IngameScript
                         return true;
                     }, WaitForDock)).Once()
                         .OnDone(() => {
-                            CurrentJob.CurrentDestination = name == "Home" ? "Work" : "Home";
                             MainMenu.Back();
                             ResetThrusters(Thrusters.Values.SelectMany(t => t));
                             ResetGyros();

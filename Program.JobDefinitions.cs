@@ -140,8 +140,9 @@ namespace IngameScript
         {
             None,
             TransitionToHome,
-            TransitioningToWork,
-            WaitFor
+            AtHome,
+            TransitionToWork,
+            AtWork
         }
         #endregion
 
@@ -164,8 +165,7 @@ namespace IngameScript
             public int MiningJobProgress;
             public bool TerrainClear;
             public bool BalanceDrills;
-            public string CurrentDestination;
-            public string CurrentPosition => CurrentDestination == "Home" ? "Work" : "Home";
+            public ShuttleStages ShuttleStage;
             public EventEnum LeaveConnector1;
             public EventEnum LeaveConnector2;
             public string TimerDockingHome;
@@ -210,7 +210,6 @@ namespace IngameScript
 
                 TerrainClear = Get(Name, "TerrainClear").ToBoolean(false);
                 BalanceDrills = Get(Name, "BalanceDrills").ToBoolean(true);
-                CurrentDestination = Get(Name, "CurrentDirection").ToString("Work");
 
                 LeaveConnector1 = (EventEnum)Get(Name, "LeaveConnector1").ToInt32((int)EventEnum.UndockCommand);
                 LeaveConnector2 = (EventEnum)Get(Name, "LeaveConnector2").ToInt32((int)EventEnum.UndockCommand);
@@ -242,7 +241,6 @@ namespace IngameScript
                 Set(Name, "MiningJobProgress", MiningJobProgress);
                 Set(Name, "TerrainClear", TerrainClear);
                 Set(Name, "BalanceDrills", BalanceDrills);
-                Set(Name, "CurrentDirection", CurrentDestination);
                 Set(Name, "LeaveConnector1", (int)LeaveConnector1);
                 Set(Name, "LeaveConnector2", (int)LeaveConnector2);
                 Set(Name, "TimerDockingHome", TimerDockingHome);
@@ -276,7 +274,6 @@ namespace IngameScript
             public double Speed;
             public float MinDistance;
             public int MiningRouteCount;
-            public ShuttleStages ShuttleStage;
         }
         JobStatus Status = new JobStatus();
 
