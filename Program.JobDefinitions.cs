@@ -211,6 +211,8 @@ namespace IngameScript
                 TerrainClear = Get(Name, "TerrainClear").ToBoolean(false);
                 BalanceDrills = Get(Name, "BalanceDrills").ToBoolean(true);
 
+                ShuttleStage = (ShuttleStages)Get(Name, "ShuttleStage").ToInt32((int)ShuttleStages.None);
+
                 LeaveConnector1 = (EventEnum)Get(Name, "LeaveConnector1").ToInt32((int)EventEnum.UndockCommand);
                 LeaveConnector2 = (EventEnum)Get(Name, "LeaveConnector2").ToInt32((int)EventEnum.UndockCommand);
 
@@ -241,6 +243,7 @@ namespace IngameScript
                 Set(Name, "MiningJobProgress", MiningJobProgress);
                 Set(Name, "TerrainClear", TerrainClear);
                 Set(Name, "BalanceDrills", BalanceDrills);
+                Set(Name, "ShuttleStage", (int)ShuttleStage);
                 Set(Name, "LeaveConnector1", (int)LeaveConnector1);
                 Set(Name, "LeaveConnector2", (int)LeaveConnector2);
                 Set(Name, "TimerDockingHome", TimerDockingHome);
