@@ -23,31 +23,31 @@ namespace IngameScript
                 bool _Hidden;
                 public bool Hidden {
                     get {
-                        return UpdateHidden?.Invoke() ?? _Hidden;
+                        return IsHidden?.Invoke() ?? _Hidden;
                     }
                     set {
                         _Hidden = value;
                     }
                 }
-                public Func<bool> UpdateHidden;
+                public Func<bool> IsHidden;
                 public Func<string> Value;
                 public Action Action;
                 public Action<int> IncDec;
 
-                public Item(string label, Func<string> value, Action<int> incDec, Action action, bool hidden, Func<bool> updateHidden) {
+                public Item(string label, Func<string> value, Action<int> incDec, Action action, bool hidden, Func<bool> isHidden) {
                     Type = ItemType.Item;
                     Label = label;
                     Value = value;
                     IncDec = incDec;
                     Action = action;
                     _Hidden = hidden;
-                    UpdateHidden = updateHidden;
+                    IsHidden = isHidden;
                 }
                 public Item(string label, Func<string> value, Action<int> incDec, bool hidden = false) : this(label, value, incDec, null, hidden, null) { }
                 public Item(string label, Action action, bool hidden = false) : this(label, null, null, action, hidden, null) { }
 
-                public Item(string label, Func<string> value, Action<int> incDec, Func<bool> updateHidden) : this(label, value, incDec, null, false, updateHidden) { }
-                public Item(string label, Action action, Func<bool> updateHidden) : this(label, null, null, action, false, updateHidden) { }
+                public Item(string label, Func<string> value, Action<int> incDec, Func<bool> isHidden) : this(label, value, incDec, null, false, isHidden) { }
+                public Item(string label, Action action, Func<bool> isHidden) : this(label, null, null, action, false, isHidden) { }
                 public static Item Separator => new Item("", null) { Type = ItemType.Separator };
             }
 
@@ -67,7 +67,7 @@ namespace IngameScript
 
                 public void Up() {
                     if (_activeOption > -1) {
-                        this[_activeOption].IncDec?.Invoke(-1);
+                        AItem.IncDec?.Invoke(-1);
                         return;
                     }
                     do {

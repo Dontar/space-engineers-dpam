@@ -40,14 +40,13 @@ namespace IngameScript
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
             Task.SetInterval((_) => RenderMenu(), 1.7f);
-            _LocationTask = Task.SetInterval((_) => CurrentJob.CurrentLocation = new Waypoint(MyMatrix, "Current"), 2).Pause();
+            Task.SetInterval((_) => CurrentJob.CurrentLocation = new Waypoint(MyMatrix, "Current"), 2f);
             ToggleMainTask(!CurrentJob.Paused);
         }
 
         ITask _LogoTask;
         ITask _MainTask;
         ITask _TransitionTask;
-        ITask _LocationTask;
         ITask _AlignTask;
         MyCommandLine Cmd = new MyCommandLine();
         Queue<string> commandQueue = new Queue<string>();
@@ -109,7 +108,6 @@ namespace IngameScript
                     if (cmd.Switches.Count > 0) {
                         if (cmd.Switch("start")) {
                             ToggleMainTask(true);
-                            ToggleTransitionTask(null, false);
                         }
                         if (cmd.Switch("stop")) {
                             ToggleMainTask(false);
@@ -128,11 +126,9 @@ namespace IngameScript
                     commandQueue.Enqueue("Undock");
                     break;
                 case "go_home":
-                    ExecuteCommand("toggle -stop");
                     ToggleTransitionTask("Home", true);
                     break;
                 case "go_work":
-                    ExecuteCommand("toggle -stop");
                     ToggleTransitionTask("Work", true);
                     break;
                 case "balance":
@@ -219,9 +215,7 @@ namespace IngameScript
                         Stage = MiningJobStages.TransitionToWork;
                         continue;
                     case MiningJobStages.TransitionToWork:
-                        job.ShuttleStage = ShuttleStages.TransitionToHome;
-                        var goToWorkLocation = GotoPosition(WaitForUndock, null);
-                        foreach (var _ in goToWorkLocation)
+                        foreach (var _ in GotoPosition(TransitionStages.TransitionToHome, WaitForUndock, null))
                             yield return null;
                         Stage = MiningJobStages.TransitionToWorkLocation;
                         continue;
@@ -333,9 +327,7 @@ namespace IngameScript
                         continue;
                     case MiningJobStages.TransitionToHome:
                         Drills.ForEach(d => d.Enabled = false);
-                        job.ShuttleStage = ShuttleStages.TransitionToHome;
-                        var goToHome = GotoPosition(waitForUndock: null, waitForDock: WaitForDock);
-                        foreach (var _ in goToHome)
+                        foreach (var _ in GotoPosition(TransitionStages.TransitionToHome, null, WaitForDock))
                             yield return null;
                         Stage = MiningJobStages.None;
                         continue;
@@ -345,8 +337,7 @@ namespace IngameScript
                             OrientGridToMatrix(Gyros, matrix);
                             yield return null;
                         }
-                        job.ShuttleStage = ShuttleStages.TransitionToHome;
-                        foreach (var _ in GotoPosition(waitForUndock: null, waitForDock: WaitForDock))
+                        foreach (var _ in GotoPosition(TransitionStages.TransitionToHome, null, WaitForDock))
                             yield return null;
 
                         ToggleMainTask(false);
@@ -389,14 +380,13 @@ namespace IngameScript
             }
 
             CurrentJob.Path.Add(new Waypoint(MyMatrix, $"Work"));
-            CurrentJob.ShuttleStage = ShuttleStages.AtWork;
+            CurrentJob.ShuttleStage = TransitionStages.AtWork;
         }
 
         void ToggleMainTask(bool start) {
             if (start) {
                 if (!Task.IsRunning(_MainTask) && CurrentJob.Type != JobType.None) {
                     ToggleTransitionTask("", false);
-                    _LocationTask.Pause(false);
                     if (CurrentJob.Type == JobType.Shuttle)
                         MainMenu.ShowTransitionMenu();
                     else
@@ -407,7 +397,6 @@ namespace IngameScript
                             Drills.ForEach(d => d.Enabled = false);
                         ResetThrusters(Thrusters.Values.SelectMany(t => t));
                         ResetGyros();
-                        _LocationTask.Pause();
                     });
                 }
             }
@@ -419,8 +408,8 @@ namespace IngameScript
         void ToggleTransitionTask(string name, bool start) {
             if (start) {
                 if (!Task.IsRunning(_TransitionTask)) {
-                    CurrentJob.ShuttleStage = name == "Home" ? ShuttleStages.TransitionToHome : ShuttleStages.TransitionToWork;
                     ToggleMainTask(false);
+                    CurrentJob.ShuttleStage = name == "Home" ? TransitionStages.TransitionToHome : TransitionStages.TransitionToWork;
                     MainMenu.ShowTransitionMenu();
                     _TransitionTask = Task.RunTask(GotoPosition((pos) => {
                         IMyShipConnector connector;

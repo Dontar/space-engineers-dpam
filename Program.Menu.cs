@@ -15,21 +15,22 @@ namespace IngameScript
         {
             public ControlMenu(Program program) : base(program) {
                 var p = program;
+                var job = p.CurrentJob;
                 var menu = CreateMenu("DPAM Control");
                 menu.AddArray(new[] {
-                    new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !p.CurrentJob.HasPath),
+                    new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !job.HasPath && job.Type == JobType.None),
                     new Item("Record path & set home/work", () => {
                         ShowPathRecordMenu();
                     }),
-                    new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => !(p.HasDrills && p.CurrentJob.HasPath)),
-                    new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), () => !p.CurrentJob.HasPath),
-                    new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !p.CurrentJob.HasPath),
-                    new Item("Go to Work", () => p.ExecuteCommand("go_work"), () => !p.CurrentJob.HasPath),
-                    new Item("Speed limit", () => $"{p.CurrentJob.Speed} m/s", (down) => {
-                        p.CurrentJob.Speed = Math.Max(10, p.CurrentJob.Speed + down);
+                    new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => !(p.HasDrills && job.HasPath)),
+                    new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), () => !job.HasPath),
+                    new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !job.HasPath),
+                    new Item("Go to Work", () => p.ExecuteCommand("go_work"), () => !job.HasPath),
+                    new Item("Speed limit", () => $"{job.Speed} m/s", (down) => {
+                        job.Speed = Math.Max(10, job.Speed + down);
                     }),
-                    new Item("Work Speed", () => $"{p.CurrentJob.WorkSpeed} m/s", (down) => {
-                        p.CurrentJob.Speed = Math.Max(10, p.CurrentJob.WorkSpeed + down);
+                    new Item("Work Speed", () => $"{job.WorkSpeed} m/s", (down) => {
+                        job.Speed = Math.Max(10, job.WorkSpeed + down);
                     }),
                 });
             }
@@ -72,10 +73,10 @@ namespace IngameScript
                 var action2 = new Item("  -Action", () => $"{job.TimerLeavingHomeAction}", (down) => job.TimerLeavingHomeAction = UpDownValue(timerActions, job.TimerLeavingHomeAction, down), true);
                 menu.AddArray(new[] {
                     new Item("Start new job", () => {// 2
-                        p.CurrentJob.Type = JobType.MiningGrinding;
-                        p.CurrentJob.MiningJobStage = MiningJobStages.None;
-                        p.CurrentJob.MiningJobProgress = 0;
-                        p.CurrentJob.WorkLocation = new Waypoint(p.MyMatrix, "WorkLocation");
+                        job.Type = JobType.MiningGrinding;
+                        job.MiningJobStage = MiningJobStages.None;
+                        job.MiningJobProgress = 0;
+                        job.WorkLocation = new Waypoint(p.MyMatrix, "WorkLocation");
                         p.ExecuteCommand("toggle -start");
                     }),
                     new Item("Continue job", () => {// 3
@@ -190,8 +191,8 @@ namespace IngameScript
                 TransitionMenu = CreateMenu("Transitioning...", false, () => {
                     var stage = job.ShuttleStage;
                     var connectorEvent = "";
-                    if (new[] { ShuttleStages.AtHome, ShuttleStages.AtWork }.Contains(stage)) {
-                        var conEvent = job.ShuttleStage == ShuttleStages.AtHome ? job.LeaveConnector1 : job.LeaveConnector2;
+                    if (new[] { TransitionStages.AtHome, TransitionStages.AtWork }.Contains(stage)) {
+                        var conEvent = job.ShuttleStage == TransitionStages.AtHome ? job.LeaveConnector1 : job.LeaveConnector2;
                         connectorEvent = $" waiting for {conEvent}";
                     }
                     return $"Status: {stage}{connectorEvent}";

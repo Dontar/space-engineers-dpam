@@ -136,7 +136,7 @@ namespace IngameScript
             ThrowGarbage,
             Done
         }
-        enum ShuttleStages
+        enum TransitionStages
         {
             None,
             TransitionToHome,
@@ -165,7 +165,7 @@ namespace IngameScript
             public int MiningJobProgress;
             public bool TerrainClear;
             public bool BalanceDrills;
-            public ShuttleStages ShuttleStage;
+            public TransitionStages ShuttleStage;
             public EventEnum LeaveConnector1;
             public EventEnum LeaveConnector2;
             public string TimerDockingHome;
@@ -211,7 +211,7 @@ namespace IngameScript
                 TerrainClear = Get(Name, "TerrainClear").ToBoolean(false);
                 BalanceDrills = Get(Name, "BalanceDrills").ToBoolean(true);
 
-                ShuttleStage = (ShuttleStages)Get(Name, "ShuttleStage").ToInt32((int)ShuttleStages.None);
+                ShuttleStage = (TransitionStages)Get(Name, "ShuttleStage").ToInt32((int)TransitionStages.None);
 
                 LeaveConnector1 = (EventEnum)Get(Name, "LeaveConnector1").ToInt32((int)EventEnum.UndockCommand);
                 LeaveConnector2 = (EventEnum)Get(Name, "LeaveConnector2").ToInt32((int)EventEnum.UndockCommand);
