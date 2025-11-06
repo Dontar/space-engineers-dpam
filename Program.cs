@@ -409,9 +409,9 @@ namespace IngameScript
             if (start) {
                 if (!Task.IsRunning(_TransitionTask)) {
                     ToggleMainTask(false);
-                    CurrentJob.ShuttleStage = name == "Home" ? TransitionStages.TransitionToHome : TransitionStages.TransitionToWork;
+                    var stage = name == "Home" ? TransitionStages.TransitionToHome : TransitionStages.TransitionToWork;
                     MainMenu.ShowTransitionMenu();
-                    _TransitionTask = Task.RunTask(GotoPosition((pos) => {
+                    _TransitionTask = Task.RunTask(GotoPosition(stage, (pos) => {
                         IMyShipConnector connector;
                         if (IsConnectedOrReady(out connector)) {
                             connector.Disconnect();
