@@ -19,13 +19,8 @@ namespace IngameScript
 
             var gravityMagnitude = Gravity.Length();
 
-            var blockSize = (Me.CubeGrid.GridSizeEnum == MyCubeSize.Large) ? 2.5f : 0.5f; // meters
-            var min = Me.CubeGrid.Min;
-            var max = Me.CubeGrid.Max;
-            var size = (max - min + Vector3I.One) * blockSize;
-
-            var width = size.X;
-            var height = size.Y;
+            var width = Dimensions.Width;
+            var height = Dimensions.Height;
             // var length = size.Z;
 
             var pivotPoint = width / 2;
