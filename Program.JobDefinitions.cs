@@ -26,7 +26,11 @@ namespace IngameScript
             }
 
             public override string ToString() {
-                return $"{_Name}@{_Matrix}";
+                var forward = Vector3.Round(_Matrix.Forward, 2);
+                var up = Vector3.Round(_Matrix.Up, 2);
+                var pos = _Matrix.Translation;
+                var str = string.Format("{{{0}}}{1}{2}", pos, forward, up);
+                return $"{_Name}@{str}";
             }
 
             public static Waypoint FromString(string data) {
@@ -48,59 +52,31 @@ namespace IngameScript
             }
 
             public static List<Waypoint> FromData(string data, string delimiter = null) {
-                var result = new List<Waypoint>();
                 if (string.IsNullOrEmpty(data))
-                    return result;
+                    return new List<Waypoint>();
                 delimiter = string.IsNullOrEmpty(delimiter) ? Environment.NewLine : delimiter;
-                var parts = data.Split(new[] { delimiter }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var part in parts) {
-                    result.Add(FromString(part));
-                }
-                return result;
+                return data.Split(new[] { delimiter }, StringSplitOptions.RemoveEmptyEntries).Select(part => FromString(part)).Where(w => w != null).ToList();
             }
 
             static bool TryParse(string s, out string name, out MatrixD matrix) {
-                name = null;
                 matrix = default(MatrixD);
+                name = null;
 
-                int atIdx = s.IndexOf('@');
-                if (atIdx < 0)
+                var parts = s.Split('@');
+                if (parts.Length < 2)
                     return false;
 
-                name = s.Substring(0, atIdx);
-                var matStr = s.Substring(atIdx + 1);
-
-                // Remove outer braces and split into row groups
-                var rows = matStr.Trim('{', '}', ' ').Split(new[] { "} {" }, StringSplitOptions.None);
-                if (rows.Length != 4)
+                name = parts[0];
+                var success = true;
+                var mat = parts[1].Trim('{', '}').Split(new[] { "}{" }, StringSplitOptions.None).Select(vec => {
+                    Vector3D result = Vector3D.Zero;
+                    success = success && Vector3D.TryParse(vec, out result);
+                    return result;
+                }).ToArray();
+                if (!success || mat.Length < 3)
                     return false;
 
-                var values = new double[16];
-                int idx = 0;
-                foreach (var row in rows) {
-                    var parts = row.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var part in parts) {
-                        var colonIdx = part.IndexOf(':');
-                        if (colonIdx < 0)
-                            continue;
-                        var valStr = part.Substring(colonIdx + 1);
-                        double val;
-                        if (!double.TryParse(valStr, out val))
-                            return false;
-                        if (idx >= 16)
-                            return false;
-                        values[idx++] = val;
-                    }
-                }
-                if (idx != 16)
-                    return false;
-
-                matrix = new MatrixD(
-                    values[0], values[1], values[2], values[3],
-                    values[4], values[5], values[6], values[7],
-                    values[8], values[9], values[10], values[11],
-                    values[12], values[13], values[14], values[15]
-                );
+                matrix = MatrixD.CreateWorld(mat[0], mat[1], mat[2]);
                 return true;
             }
         }
@@ -262,7 +238,11 @@ namespace IngameScript
             }
 
             public JobDefinition(string name, string data) {
-                Load(data, name);
+                try {
+                    Load(data, name);
+                } catch (Exception ex) {
+                    Util.Echo($"Error loading job definition {ex.Message}" + Environment.NewLine + ex.StackTrace);
+                }
             }
         }
 
