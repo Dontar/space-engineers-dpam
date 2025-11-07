@@ -222,12 +222,12 @@ namespace IngameScript
             else
                 pathIdx = 1;
 
-            while (!waitForUndock?.Invoke(path[0].Name) ?? false)
+            while (!waitForUndock?.Invoke(path[0]._Name) ?? false)
                 yield return null;
 
             Status.MinDistance = 0.25f;
             Status.Speed = 2;
-            job.ShuttleStage = last.Name == "Work" ? TransitionStages.TransitionToWork : TransitionStages.TransitionToHome;
+            job.ShuttleStage = last._Name == "Work" ? TransitionStages.TransitionToWork : TransitionStages.TransitionToHome;
             for (var i = pathIdx; i < path.Count; i++) {
                 var currentWaypoint = path[i];
                 Status.Current = currentWaypoint;
@@ -249,7 +249,7 @@ namespace IngameScript
             ResetGyros();
             ResetThrusters(Thrusters.Values.SelectMany(v => v));
             job.ShuttleStage = job.ShuttleStage == TransitionStages.TransitionToHome ? TransitionStages.AtHome : TransitionStages.AtWork;
-            while (!waitForDock?.Invoke(last.Name) ?? false)
+            while (!waitForDock?.Invoke(last._Name) ?? false)
                 yield return null;
         }
 
@@ -357,7 +357,7 @@ namespace IngameScript
                 return "";
             foreach (var waypoint in CurrentJob.Path) {
                 var pos = waypoint.Matrix.Translation;
-                var gps = $"GPS:{waypoint.Name}:{pos.X}:{pos.Y}:{pos.Z}:";
+                var gps = $"GPS:{waypoint._Name}:{pos.X}:{pos.Y}:{pos.Z}:";
                 gpsList.Add(gps);
             }
             return string.Join(Environment.NewLine, gpsList);

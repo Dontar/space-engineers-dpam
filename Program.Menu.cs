@@ -76,7 +76,7 @@ namespace IngameScript
                         job.Type = JobType.MiningGrinding;
                         job.MiningJobStage = MiningJobStages.None;
                         job.MiningJobProgress = 0;
-                        job.WorkLocation = new Waypoint(p.MyMatrix, "WorkLocation");
+                        job.WorkLocation = Waypoint.AddPoint(p.MyMatrix, "WorkLocation");
                         p.ExecuteCommand("toggle -start");
                     }),
                     new Item("Continue job", () => {// 3

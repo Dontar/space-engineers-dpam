@@ -40,7 +40,7 @@ namespace IngameScript
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
             Task.SetInterval((_) => RenderMenu(), 1.7f);
-            Task.SetInterval((_) => CurrentJob.CurrentLocation = new Waypoint(MyMatrix, "Current"), 2f);
+            Task.SetInterval((_) => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
             ToggleMainTask(!CurrentJob.Paused);
         }
 
@@ -197,7 +197,7 @@ namespace IngameScript
 
             var condition = new[] { MiningJobStages.TransitionToHome, MiningJobStages.TransitionToWork, MiningJobStages.None, MiningJobStages.Done };
             if (!condition.Contains(Stage) && job.CurrentLocation != null) {
-                var lastPos = job.CurrentLocation.Matrix.Translation;
+                var lastPos = job.CurrentLocation;
                 var refDistance = Vector3D.Distance(lastPos, pos);
                 var distance = Vector3D.Distance(MyMatrix.Translation, pos);
                 if (distance > refDistance + 2) {
@@ -360,26 +360,27 @@ namespace IngameScript
         bool Recording;
         IEnumerable RecordPathTask() {
             var minDistance = Me.CubeGrid.WorldVolume.Radius * 2;
-            CurrentJob.Path.Clear();
+            var path = CurrentJob.Path;
+            path.Clear();
             var counter = 0;
             MainMenu.ShowPathRecordMenu();
             Recording = true;
 
             var matrix = MyMatrix;
-            CurrentJob.Path.Add(new Waypoint(matrix, $"Home"));
+            Waypoint.AddPoint(path, matrix, "Home");
             var previous = matrix.Translation;
 
             while (Recording) {
                 matrix = MyMatrix;
                 var position = matrix.Translation;
                 if (Vector3D.Distance(position, previous) > minDistance) {
-                    CurrentJob.Path.Add(new Waypoint(matrix, $"Waypoint#{counter++}"));
+                    Waypoint.AddPoint(path, matrix, $"Waypoint#{counter++}");
                 }
                 previous = position;
                 yield return null;
             }
 
-            CurrentJob.Path.Add(new Waypoint(MyMatrix, $"Work"));
+            Waypoint.AddPoint(path, MyMatrix, "Work");
             CurrentJob.ShuttleStage = TransitionStages.AtWork;
         }
 
