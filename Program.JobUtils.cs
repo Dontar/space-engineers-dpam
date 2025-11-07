@@ -202,13 +202,13 @@ namespace IngameScript
             var job = CurrentJob;
             if ((CurrentJob.Path?.Count ?? 0) == 0)
                 yield break;
-            var path = new List<Waypoint>(CurrentJob.Path);
+            var path = new List<IMyAutopilotWaypoint>(CurrentJob.Path);
 
             if (new[] { TransitionStages.AtWork, TransitionStages.TransitionToHome }.Contains(job.ShuttleStage))
                 path.Reverse();
 
             var last = path[path.Count - 1];
-            Waypoint previous = path[0];
+            var previous = path[0];
             Status.Destination = last;
             Status.Count = path.Count;
 
@@ -217,17 +217,17 @@ namespace IngameScript
             if (pathIdx > 0) {
                 var direction = Vector3D.Normalize(path[pathIdx].Matrix.Translation - currentPosition);
                 var gravity = -Gravity;
-                previous = new Waypoint(MatrixD.CreateWorld(currentPosition, Vector3D.ProjectOnPlane(ref direction, ref gravity), gravity), "Previous");
+                previous = Waypoint.AddPoint(MatrixD.CreateWorld(currentPosition, Vector3D.ProjectOnPlane(ref direction, ref gravity), gravity), "Previous");
             }
             else
                 pathIdx = 1;
 
-            while (!waitForUndock?.Invoke(path[0]._Name) ?? false)
+            while (!waitForUndock?.Invoke(path[0].Name) ?? false)
                 yield return null;
 
             Status.MinDistance = 0.25f;
             Status.Speed = 2;
-            job.ShuttleStage = last._Name == "Work" ? TransitionStages.TransitionToWork : TransitionStages.TransitionToHome;
+            job.ShuttleStage = last.Name == "Work" ? TransitionStages.TransitionToWork : TransitionStages.TransitionToHome;
             for (var i = pathIdx; i < path.Count; i++) {
                 var currentWaypoint = path[i];
                 Status.Current = currentWaypoint;
@@ -249,7 +249,7 @@ namespace IngameScript
             ResetGyros();
             ResetThrusters(Thrusters.Values.SelectMany(v => v));
             job.ShuttleStage = job.ShuttleStage == TransitionStages.TransitionToHome ? TransitionStages.AtHome : TransitionStages.AtWork;
-            while (!waitForDock?.Invoke(last._Name) ?? false)
+            while (!waitForDock?.Invoke(last.Name) ?? false)
                 yield return null;
         }
 
@@ -357,7 +357,7 @@ namespace IngameScript
                 return "";
             foreach (var waypoint in CurrentJob.Path) {
                 var pos = waypoint.Matrix.Translation;
-                var gps = $"GPS:{waypoint._Name}:{pos.X}:{pos.Y}:{pos.Z}:";
+                var gps = $"GPS:{waypoint.Name}:{pos.X}:{pos.Y}:{pos.Z}:";
                 gpsList.Add(gps);
             }
             return string.Join(Environment.NewLine, gpsList);

@@ -62,7 +62,8 @@ namespace IngameScript
                     ExecuteCommand(argument);
                 }
                 catch (Exception e) {
-                    Util.Echo($"Error executing command: {e.Message}" + Environment.NewLine + e.StackTrace);
+                    Util.Echo($"Error executing command: {e.Message}");
+                    Util.Echo(e.StackTrace, true);
                 }
 
             if (!updateSource.HasFlag(UpdateType.Update10))
