@@ -57,6 +57,7 @@ namespace IngameScript
                 .ToDictionary(k => k.Key, v => v.ToArray());
             Connectors = Util.GetBlocks<IMyShipConnector>(b => Util.IsNotIgnored(b, _ignoreTag) && !b.ThrowOut);
             Drills = Util.GetBlocks<IMyShipDrill>(b => Util.IsNotIgnored(b, _ignoreTag));
+            Status.HasDrills = HasDrills;
             Grinders = Util.GetBlocks<IMyShipGrinder>(b => Util.IsNotIgnored(b, _ignoreTag));
             Sorters = Util.GetBlocks<IMyConveyorSorter>(b => Util.IsNotIgnored(b, _ignoreTag));
             CargoContainers = Util.GetBlocks<IMyCargoContainer>(b => Util.IsNotIgnored(b, _ignoreTag));

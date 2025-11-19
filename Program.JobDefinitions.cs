@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Windows.Markup;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI.Ingame;
+using VRage;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRageMath;
 
@@ -28,9 +30,9 @@ namespace IngameScript
                 list.Add(wp);
                 return wp;
             }
-            
-            public static IMyAutopilotWaypoint AddPoint(List<IMyAutopilotWaypoint> list, MatrixD point, MatrixD reference, string name, long relatedEntityId = 0) {
-                var wp = new Waypoint(new[] { point.Translation - reference.Translation, point.Forward, point.Up }, name, reference.Translation, relatedEntityId);
+
+            public static IMyAutopilotWaypoint AddPoint(List<IMyAutopilotWaypoint> list, MatrixD point, Vector3D reference, string name, long relatedEntityId = 0) {
+                var wp = new Waypoint(new[] { point.Translation - reference, point.Forward, point.Up }, name, reference, relatedEntityId);
                 list.Add(wp);
                 return wp;
             }
@@ -38,8 +40,8 @@ namespace IngameScript
             public static IMyAutopilotWaypoint AddPoint(MatrixD point, string name) =>
                 new Waypoint(new[] { point.Translation, point.Forward, point.Up }, name);
 
-            public static IMyAutopilotWaypoint AddPoint(MatrixD point, MatrixD reference, string name, long relatedEntityId = 0) =>
-                new Waypoint(new[] { point.Translation - reference.Translation, point.Forward, point.Up }, name, reference.Translation, relatedEntityId);
+            public static IMyAutopilotWaypoint AddPoint(MatrixD point, Vector3D reference, string name, long relatedEntityId = 0) =>
+                new Waypoint(new[] { point.Translation - reference, point.Forward, point.Up }, name, reference, relatedEntityId);
 
             Waypoint(Vector3D[] point, string name, Vector3D _reference = default(Vector3D), long relatedEntityId = 0) {
                 _RelativeMatrix = point;
@@ -158,14 +160,16 @@ namespace IngameScript
 
         class JobDefinition : MyIni
         {
+            // Path related
             public string Name;
-            public Vector3D CurrentLocation;
             public bool Paused;
             public List<IMyAutopilotWaypoint> Path;
-            // public Vector3D PathReference;
+            public string RelativeGrid;
             public bool HasPath => Path != null && Path.Count > 0;
-            public JobType Type;
             public float Speed;
+            // mining
+            public Vector3D CurrentLocation;
+            public JobType Type;
             public float WorkSpeed;
             public float MinAltitude;
             public Vector3 Dimensions;
@@ -176,6 +180,7 @@ namespace IngameScript
             public int MiningJobProgress;
             public bool TerrainClear;
             public bool BalanceDrills;
+            // shuttle
             public TransitionStages ShuttleStage;
             public EventEnum LeaveConnector1;
             public EventEnum LeaveConnector2;
@@ -188,30 +193,21 @@ namespace IngameScript
             public TimerAction TimerDockingWorkAction;
             public TimerAction TimerLeavingWorkAction;
 
-            public void Load(string data, string name = "Default") {
-                if (!TryParse(data))
-                    return;
-                Name = name;
+            public void Load() {
                 Paused = Get(Name, "Paused").ToBoolean(true);
 
-                Vector3D loc;
-                Vector3D.TryParse(Get(Name, "CurrentLocation").ToString("").Trim('{', '}'), out loc);
-                CurrentLocation = loc;
+                CurrentLocation = Get(Name, "CurrentLocation").ToVector();
 
-                // Vector3D pathRef;
-                // Vector3D.TryParse(Get(Name, "PathReference").ToString("").Trim('{', '}'), out pathRef);
-                // PathReference = pathRef;
+                Path = Waypoint.FromData(Get(Name, "Path").ToString(""), "|");
 
-                Path = Waypoint.FromData(Get(Name, "Path").ToString(""), "|"/* , PathReference */);
+                RelativeGrid = Get(Name, "RelativeGrid").ToString("None");
 
                 Type = (JobType)Get(Name, "Type").ToInt32((int)JobType.None);
                 Speed = Get(Name, "Speed").ToSingle(30f);
                 WorkSpeed = Get(Name, "WorkSpeed").ToSingle(1f);
                 MinAltitude = Get(Name, "MinAltitude").ToSingle(10f);
 
-                Vector3D dimVec;
-                Vector3D.TryParse(Get(Name, "Dimensions").ToString("{X:10 Y:10 Z:10}").Trim('{', '}'), out dimVec);
-                Dimensions = dimVec;
+                Dimensions = Get(Name, "Dimensions").ToVector();
 
                 DepthMode = (DepthMode)Get(Name, "DepthMode").ToInt32((int)DepthMode.Depth);
                 StartPosition = (StartPosition)Get(Name, "StartPosition").ToInt32((int)StartPosition.TopLeft);
@@ -245,6 +241,7 @@ namespace IngameScript
                 Set(Name, "CurrentLocation", CurrentLocation.ToString());
                 Set(Name, "Paused", Paused);
                 Set(Name, "Path", Path != null ? Waypoint.ToData(Path, "|") : "");
+                Set(Name, "RelativeGrid", RelativeGrid);
                 Set(Name, "Type", (int)Type);
                 Set(Name, "Speed", Speed);
                 Set(Name, "WorkSpeed", WorkSpeed);
@@ -272,16 +269,35 @@ namespace IngameScript
             }
 
             public void Reset() {
-                Load("", "Default");
+                Clear();
+                Load();
             }
 
             public JobDefinition(string name, string data) {
                 try {
-                    Load(data, name);
+                    Name = name;
+                    TryParse(data);
+                    Load();
                 }
                 catch (Exception ex) {
                     Util.Echo($"Error loading job definition {ex.Message}" + Environment.NewLine + ex.StackTrace);
                 }
+            }
+
+            public IDictionary<string, string> Serialize() {
+                Save();
+                var toIgnore = new[] { "CurrentLocation", "Path", "WorkLocation", };
+                var list = new List<MyIniKey>();
+                GetKeys(Name, list);
+                return list.Where(k => !toIgnore.Contains(k.Name)).ToDictionary(k => k.Name, k => Get(k).ToString());
+            }
+
+            public void Deserialize(IDictionary<string, string> data) {
+                Save();
+                foreach (var item in data) {
+                    Set(Name, item.Key, item.Value);
+                }
+                Load();
             }
         }
 
@@ -291,11 +307,41 @@ namespace IngameScript
         {
             public IMyAutopilotWaypoint Destination;
             public IMyAutopilotWaypoint Current;
+            public Vector3D Relation;
+            public bool Recording;
+            public bool HasDrills;
+            public int PathCount;
+            public bool HasPath;
             public int Count;
             public int Left;
             public double Speed;
             public float MinDistance;
             public int MiningRouteCount;
+
+            public IDictionary<string, string> Serialize() {
+                return new Dictionary<string, string>() {
+                    { "Recording", Recording.ToString() },
+                    { "HasDrills" , HasDrills.ToString() },
+                    { "PathCount", PathCount.ToString() },
+                    { "HasPath", HasPath.ToString() },
+                    { "Count", Count.ToString() },
+                    { "Left", Left.ToString() },
+                    { "Speed", Speed.ToString() },
+                    { "MinDistance", MinDistance.ToString() },
+                    { "MiningRouteCount", MiningRouteCount.ToString() },
+                };
+            }
+            public void Deserialize(IDictionary<string, string> data) {
+                Recording = bool.Parse(data["Recording"]);
+                HasDrills = bool.Parse(data["HasDrills"]);
+                PathCount = int.Parse(data["PathCount"]);
+                HasPath = bool.Parse(data["HasPath"]);
+                Count = int.Parse(data["Count"]);
+                Left = int.Parse(data["Left"]);
+                Speed = double.Parse(data["Speed"]);
+                MinDistance = float.Parse(data["MinDistance"]);
+                MiningRouteCount = int.Parse(data["MiningRouteCount"]);
+            }
         }
         JobStatus Status = new JobStatus();
 
@@ -306,6 +352,14 @@ namespace IngameScript
             set {
                 CurrentJob.MiningJobStage = value;
             }
+        }
+    }
+    public static class MyIniValueExtension
+    {
+        public static Vector3D ToVector(this MyIniValue source, Vector3D def = default(Vector3D)) {
+            Vector3D result = def;
+            Vector3D.TryParse(source.ToString("").Trim('{', '}'), out result);
+            return result;
         }
     }
 }

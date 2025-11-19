@@ -34,13 +34,14 @@ namespace IngameScript
         public Program() {
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             Util.Init(this);
+            Comm = new Comms(this, Me.CubeGrid.IsStatic);
             CurrentJob = new JobDefinition("Default", Storage);
-            MainMenu = new ControlMenu(this);
+            MainMenu = new ControlMenu(this, Me.CubeGrid.IsStatic);
             InitController();
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
-            Task.SetInterval((_) => RenderMenu(), 1.7f);
-            Task.SetInterval((_) => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
+            Task.SetInterval(_ => RenderMenu(), 1.7f);
+            Task.SetInterval(_ => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
             ToggleMainTask(!CurrentJob.Paused);
         }
 
@@ -65,6 +66,9 @@ namespace IngameScript
                     Util.Echo($"Error executing command: {e.Message}");
                     Util.Echo(e.StackTrace, true);
                 }
+
+            if (updateSource.HasFlag(UpdateType.IGC))
+                Comm.ReceiveMessages();
 
             if (!updateSource.HasFlag(UpdateType.Update10))
                 return;
@@ -91,37 +95,32 @@ namespace IngameScript
             switch (cmd.Argument(0).ToLower()) {
                 case "record":
                     if (cmd.Switches.Count > 0) {
-                        if (cmd.Switch("start") && !Recording)
+                        if (cmd.Switch("start") && !Status.Recording)
                             Task.RunTask(RecordPathTask()).Once().Every(1.7f);
                         if (cmd.Switch("stop"))
-                            Recording = false;
+                            Status.Recording = false;
                         return;
                     }
-                    if (!Recording)
+                    if (!Status.Recording)
                         Task.RunTask(RecordPathTask()).Once().Every(1f);
                     else
-                        Recording = false;
+                        Status.Recording = false;
                     break;
                 case "reset":
                     CurrentJob.Reset();
                     break;
                 case "toggle":
-                    if (cmd.Switches.Count > 0) {
-                        if (cmd.Switch("start")) {
-                            ToggleMainTask(true);
-                        }
-                        if (cmd.Switch("stop")) {
-                            ToggleMainTask(false);
-                            ToggleTransitionTask(null, false);
-                        }
-                    }
-                    else {
-                        if (Task.IsRunning(_TransitionTask)) {
-                            ToggleTransitionTask(null, false);
-                        }
-                        else
-                            ToggleMainTask(!Task.IsRunning(_MainTask));
-                    }
+                    if (Task.IsRunning(_TransitionTask))
+                        ToggleTransitionTask(null, false);
+                    else
+                        ToggleMainTask(!Task.IsRunning(_MainTask));
+                    break;
+                case "start":
+                    ToggleMainTask(true);
+                    break;
+                case "stop":
+                    ToggleMainTask(false);
+                    ToggleTransitionTask(null, false);
                     break;
                 case "undock":
                     commandQueue.Enqueue("Undock");
@@ -146,6 +145,10 @@ namespace IngameScript
                     result.AppendLine("---");
                     result.Append(PathToGps());
                     Me.CustomData = result.ToString();
+                    break;
+                case "controller":
+                    Comm = new Comms(this, true);
+                    MainMenu = new ControlMenu(this, true);
                     break;
                 default:
                     if (MainMenu.ProcessMenuCommands(Cmd))
@@ -269,7 +272,7 @@ namespace IngameScript
 
                                 if (job.DepthMode == DepthMode.Auto) {
                                     var currentCargo = OreAmount;
-                                    if (timer != null && timer.Await()) {
+                                    if (timer != null && Task.IsRunning(timer)) {
                                         if (currentCargo != previousCargo) {
                                             timer = Task.SetTimeout(() => { }, 5);
                                             previousCargo = currentCargo;
@@ -358,31 +361,50 @@ namespace IngameScript
             }
         }
 
-        bool Recording;
         IEnumerable RecordPathTask() {
             var minDistance = Me.CubeGrid.WorldVolume.Radius * 2;
             var path = CurrentJob.Path;
             path.Clear();
             var counter = 0;
             MainMenu.ShowPathRecordMenu();
-            Recording = true;
+            Status.Recording = true;
+            Status.PathCount = 0;
+            Status.HasPath = CurrentJob.HasPath;
+            Status.Relation = Vector3D.Zero;
+            var isRelative = !string.IsNullOrEmpty(CurrentJob.RelativeGrid) && CurrentJob.RelativeGrid != "None";
+            if (isRelative) {
+                var promise = Comm.SendCommand(Comm.Controllers[CurrentJob.RelativeGrid], CmdGetPos, null);
+                while (!promise.IsDone)
+                    yield return null;
+                Status.Relation = promise.As<Vector3D>();
+            }
 
             var matrix = MyMatrix;
-            Waypoint.AddPoint(path, matrix, "Home");
+            Waypoint.AddPoint(path, matrix, Status.Relation, "Home");
             var previous = matrix.Translation;
 
-            while (Recording) {
+            while (Status.Recording) {
+                if (isRelative) {
+                    var promise = Comm.SendCommand(Comm.Controllers[CurrentJob.RelativeGrid], CmdGetPos, null);
+                    while (!promise.IsDone)
+                        yield return null;
+                    Status.Relation = promise.As<Vector3D>();
+                }
                 matrix = MyMatrix;
                 var position = matrix.Translation;
                 if (Vector3D.Distance(position, previous) > minDistance) {
-                    Waypoint.AddPoint(path, matrix, $"Waypoint#{counter++}");
+                    Waypoint.AddPoint(path, matrix, Status.Relation, $"Waypoint#{counter++}");
                 }
                 previous = position;
+                Status.PathCount = path.Count;
+                Status.HasPath = CurrentJob.HasPath;
                 yield return null;
             }
 
-            Waypoint.AddPoint(path, MyMatrix, "Work");
+            Waypoint.AddPoint(path, MyMatrix, Status.Relation, "Work");
             CurrentJob.ShuttleStage = TransitionStages.AtWork;
+            Status.PathCount = path.Count;
+            Status.HasPath = CurrentJob.HasPath;
         }
 
         void ToggleMainTask(bool start) {
