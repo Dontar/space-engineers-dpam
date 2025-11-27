@@ -29,22 +29,33 @@ namespace IngameScript
         #region mdk preserve
         string _tag = "{DPAM}";
         string _ignoreTag = "{Ignore}";
+        string isController = "Auto"; // Auto, Yes, No
         #endregion
 
         public Program() {
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             Util.Init(this);
-            Comm = new Comms(this, Me.CubeGrid.IsStatic);
+            Comm = new Comms(this, IsController);
             CurrentJob = new JobDefinition("Default", Storage);
-            MainMenu = new ControlMenu(this, Me.CubeGrid.IsStatic);
+            MainMenu = new ControlMenu(this, IsController);
             InitController();
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
             Task.SetInterval(_ => RenderMenu(), 1.7f);
             Task.SetInterval(_ => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
+
+            if (!IsController)
+                Task.SetInterval(_ => {
+                    Status.FillLevel = FillLevel;
+                    Status.OreAmount = OreAmount;
+                    Status.GarbageAmount = (float)GarbageAmount;
+                    Status.BatteriesLevel = (float)BatteriesLevel;
+                }, 1);
+
             ToggleMainTask(!CurrentJob.Paused);
         }
 
+        bool IsController => isController == "Auto" && Me.CubeGrid.IsStatic || isController == "Yes";
         ITask _LogoTask;
         ITask _MainTask;
         ITask _TransitionTask;
@@ -145,10 +156,6 @@ namespace IngameScript
                     result.AppendLine("---");
                     result.Append(PathToGps());
                     Me.CustomData = result.ToString();
-                    break;
-                case "controller":
-                    Comm = new Comms(this, true);
-                    MainMenu = new ControlMenu(this, true);
                     break;
                 default:
                     if (MainMenu.ProcessMenuCommands(Cmd))

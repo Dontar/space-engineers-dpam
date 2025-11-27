@@ -23,15 +23,8 @@ namespace IngameScript
                 IsController = isController;
                 if (isController)
                     ShowControllerMenu();
-                else {
-                    Task.SetInterval(_ => {
-                        Stat.FillLevel = program.FillLevel;
-                        Stat.OreAmount = program.OreAmount;
-                        Stat.GarbageAmount = (float)program.GarbageAmount;
-                        Stat.BatteriesLevel = (float)program.BatteriesLevel;
-                    }, 1);
+                else
                     ShowMainMenu();
-                }
             }
 
             void ShowControllerMenu() {
