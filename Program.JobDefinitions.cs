@@ -305,10 +305,9 @@ namespace IngameScript
 
         class JobStatus
         {
-            public IMyAutopilotWaypoint Destination;
-            public IMyAutopilotWaypoint Current;
             public Vector3D Relation;
-            public bool Recording;
+            public string DestinationName;
+            public string CurrentName;
             public bool HasDrills;
             public int PathCount;
             public bool HasPath;
@@ -318,8 +317,24 @@ namespace IngameScript
             public float MinDistance;
             public int MiningRouteCount;
 
+            public float FillLevel;
+            public float OreAmount;
+            public float GarbageAmount;
+            public float BatteriesLevel;
+
+            public bool Recording;
+            public bool Mining;
+            public bool Shuttling;
+
             public IDictionary<string, string> Serialize() {
                 return new Dictionary<string, string>() {
+                    { "FillLevel", FillLevel.ToString() },
+                    { "OreAmount", OreAmount.ToString() },
+                    { "GarbageAmount", GarbageAmount.ToString() },
+                    { "BatteriesLevel", BatteriesLevel.ToString() },
+                    { "CurrentName" , CurrentName },
+                    { "DestinationName" , DestinationName },
+                    { "Relation", Relation.ToString() },
                     { "Recording", Recording.ToString() },
                     { "HasDrills" , HasDrills.ToString() },
                     { "PathCount", PathCount.ToString() },
@@ -332,6 +347,13 @@ namespace IngameScript
                 };
             }
             public void Deserialize(IDictionary<string, string> data) {
+                if (data == null) return;
+                FillLevel = float.Parse(data["FillLevel"]);
+                OreAmount = float.Parse(data["OreAmount"]);
+                GarbageAmount = float.Parse(data["GarbageAmount"]);
+                BatteriesLevel = float.Parse(data["BatteriesLevel"]);
+                CurrentName = data["CurrentName"];
+                DestinationName = data["DestinationName"];
                 Recording = bool.Parse(data["Recording"]);
                 HasDrills = bool.Parse(data["HasDrills"]);
                 PathCount = int.Parse(data["PathCount"]);
@@ -357,9 +379,8 @@ namespace IngameScript
     public static class MyIniValueExtension
     {
         public static Vector3D ToVector(this MyIniValue source, Vector3D def = default(Vector3D)) {
-            Vector3D result = def;
-            Vector3D.TryParse(source.ToString("").Trim('{', '}'), out result);
-            return result;
+            Vector3D result;
+            return Vector3D.TryParse(source.ToString("").Trim('{', '}'), out result) ? result : def;
         }
     }
 }

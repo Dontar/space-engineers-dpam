@@ -28,21 +28,21 @@ namespace IngameScript
                 isDone = true;
                 Result = result;
             }
-            public Promise(Action<Action<object>> cb, bool wait = true) {
-                isDone = !wait;
+            public Promise(Action<Action<object>> cb) {
                 ITask task = null;
-                if (wait)
-                    task = Task.SetInterval(_ => {
-                        cb(Resolve);
-                        if (isDone)
-                            Task.StopTask(task);
-                    }, 0).OnDone(() => {
-                        onDone?.Invoke(Result);
-                    });
+                task = Task.SetInterval(_ => {
+                    cb(Resolve);
+                    if (isDone || onDone == null)
+                        Task.StopTask(task);
+                }, 0).OnDone(() => {
+                    onDone?.Invoke(Result);
+                });
             }
 
             public static Promise All(Promise[] list) {
                 return new Promise(res => {
+                    for (int i = 0; i < list.Length; i++)
+                        list[i].Then(_ => {});
                     var results = new object[list.Length];
                     ITask task = null;
                     task = Task.SetInterval(ctx => {

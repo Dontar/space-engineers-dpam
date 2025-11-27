@@ -136,12 +136,13 @@ namespace IngameScript
                 }
             }
 
-            protected Stack<Menu> menuStack = new Stack<Menu>();
+            protected Stack<Menu> menuStack;
 
             protected Program program;
 
             public MenuManager(Program program) {
                 this.program = program;
+                menuStack = new Stack<Menu>();
             }
             public void Up() => menuStack.Peek().Up();
             public void Down() => menuStack.Peek().Down();

@@ -12,41 +12,56 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         ControlMenu MainMenu;
-        class ControlMenu : MenuManager, IDisposable
+        class ControlMenu : MenuManager
         {
             JobDefinition Job => program.CurrentJob;
             JobStatus Stat => program.Status;
             Comms Comm => program.Comm;
             bool IsController;
             long CurrentShip;
-            ITask refreshTask;
             public ControlMenu(Program program, bool isController) : base(program) {
                 IsController = isController;
-                if (isController) {
+                if (isController)
                     ShowControllerMenu();
-                    refreshTask = Task.SetInterval(_ => Comm.SendCommand(CurrentShip, CmdGetStat, null).Then<IDictionary<string, string>>(res => Stat.Deserialize(res)), 1);
-                }
-                else
+                else {
+                    Task.SetInterval(_ => {
+                        Stat.FillLevel = program.FillLevel;
+                        Stat.OreAmount = program.OreAmount;
+                        Stat.GarbageAmount = (float)program.GarbageAmount;
+                        Stat.BatteriesLevel = (float)program.BatteriesLevel;
+                    }, 1);
                     ShowMainMenu();
-            }
-            public void Dispose() {
-                Task.StopTask(refreshTask);
+                }
             }
 
             void ShowControllerMenu() {
                 var p = program;
                 var menu = CreateMenu("DPAM Controller");
-                Comm.SendBroadcast(CmdGetShipNames, p.Me.CubeGrid.CustomName).Then<IDictionary<long, string>>(ships => {
-                    // Ships = ships;
-                    var shipMenus = ships.Select(ship => new Item(ship.Value, () => {
-                        CurrentShip = ship.Key;
-                        Comm.SendCommand(ship.Key, CmdGetDef, null).Then<IDictionary<string, string>>(res => {
-                            Job.Deserialize(res);
-                            ShowMainMenu();
-                        });
-                    }));
-                    menu.AddRange(shipMenus);
-                });
+                Task.SetInterval(_ => {
+                    Comm.SendBroadcast(CmdGetShipNames, p.Me.CubeGrid.CustomName).Then<IDictionary<long, string>>(ships => {
+                        var shipMenus = ships.Select(ship => new Item(ship.Value, () => {
+                            CurrentShip = ship.Key;
+                            Promise.All(new[] {
+                                Comm.SendCommand(CurrentShip, CmdGetDef),
+                                Comm.SendCommand(CurrentShip, CmdGetStat)
+                            }).Then<IDictionary<string, string>[]>(res => {
+                                Job.Deserialize(res[0]);
+                                Stat.Deserialize(res[1]);
+
+                                if (Stat.Shuttling) {
+                                    ShowTransitionMenu();
+                                }
+                                else if (Stat.Mining) {
+                                    ShowMiningMenu();
+                                }
+                                else
+                                    ShowMainMenu();
+                            });
+                        }));
+                        menu.Clear();
+                        menu.AddRange(shipMenus);
+                    });
+                }, 120f);
             }
 
             void ShowMainMenu() {
@@ -54,25 +69,21 @@ namespace IngameScript
                 var menu = CreateMenu("DPAM Control");
                 Func<bool> hp = () => (IsController && !Stat.HasPath) || !Job.HasPath;
                 menu.AddArray(new[] {
-                    new Item("Start/Stop", () => {
-                        if (IsController)
-                            Comm.SendCommand(CurrentShip, CmdToggle, null, false);
-                        else
-                            p.ExecuteCommand("toggle");
-                    }, () => (IsController && !Stat.HasPath) || (!Job.HasPath && Job.Type == JobType.None)),
                     new Item("Record path & set home/work", () => ShowPathRecordMenu()),
-                    new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => (IsController && !(Stat.HasDrills && Stat.HasPath)) || !(p.HasDrills && Job.HasPath)),
-                    new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), hp),
+                    new Item("Mining/Grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => (IsController && !(Stat.HasDrills && Stat.HasPath)) || !(p.HasDrills && Job.HasPath)),
+                    new Item("Shuttle job", () => ShowShuttleConfigMenu(), hp),
                     new Item("Go to Home", () => {
-                        if (IsController)
-                            Comm.SendCommand(CurrentShip, CmdGoHome, null, false);
-                        else
+                        if (IsController){
+                            Comm.SendCommand(CurrentShip, CmdGoHome);
+                            ShowTransitionMenu();
+                        } else
                             p.ExecuteCommand("go_home");
                     }, hp),
                     new Item("Go to Work", () => {
-                        if (IsController)
-                            Comm.SendCommand(CurrentShip, CmdGoWork, null, false);
-                        else
+                        if (IsController) {
+                            Comm.SendCommand(CurrentShip, CmdGoWork);
+                            ShowTransitionMenu();
+                        } else
                             p.ExecuteCommand("go_work");
                     }, hp),
                     new Item("Speed limit", () => $"{Job.Speed} m/s", (down) => {
@@ -88,32 +99,36 @@ namespace IngameScript
                 return array[(Array.IndexOf(array, currentValue) + down + (down < 0 ? array.Length : 0)) % array.Length];
             }
 
-            Menu PathRecordMenu;
             public void ShowPathRecordMenu() {
-                if (PathRecordMenu != null) {
-                    if (!menuStack.Contains(PathRecordMenu))
-                        menuStack.Push(PathRecordMenu);
-                    return;
-                }
                 var p = program;
 
                 string[] controllers = new[] { "None" };
                 if (IsController)
-                    Comm.SendCommand(CurrentShip, CmdGetControllers, null).Then<IList<string>>(res => controllers = Enumerable.Concat(controllers, res).ToArray());
+                    Comm.SendCommand(CurrentShip, CmdGetControllers).Then<IList<string>>(res => controllers = Enumerable.Concat(controllers, res).ToArray());
                 else
                     controllers = Enumerable.Concat(controllers, Comm.Controllers.Keys).ToArray();
 
-                PathRecordMenu = CreateMenu("Path Recording", () => $"Recording: " + (Stat.Recording ? "Yes" : "No"));
-                PathRecordMenu.AddArray(new[] {
+                ITask statTask = null;
+
+                var menu = CreateMenu("Path Recording", () => $"Recording: " + (Stat.Recording ? "Yes" : "No"));
+                menu.AddArray(new[] {
                     new Item("Start recording", () => {
-                        if (IsController)
-                            Comm.SendCommand(CurrentShip, CmdRecStart, null, false);
+                        if (IsController) {
+                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary());
+                            Comm.SendCommand(CurrentShip, CmdRecStart);
+
+                            statTask = Task.SetInterval(_ => {
+                                Comm.SendCommand(CurrentShip, CmdGetStat).Then<IDictionary<string, string>>(res => Stat.Deserialize(res));
+                            }, 1);
+                        }
                         else
                             p.ExecuteCommand("record -start");
                     }),
                     new Item("Stop recording", () => {
-                        if (IsController)
-                            Comm.SendCommand(CurrentShip, CmdRecStop, null, false);
+                        if (IsController) {
+                            Comm.SendCommand(CurrentShip, CmdRecStop);
+                            Task.StopTask(statTask);
+                        }
                         else
                             p.ExecuteCommand("record -stop");
                     }),
@@ -134,8 +149,8 @@ namespace IngameScript
 
                 string[] timers = new[] { "None" };
                 if (IsController) {
-                    Comm.SendCommand(CurrentShip, CmdGetTimers, null).Then<IList<string>>(res => timers = Enumerable.Concat(timers, res).ToArray());
-                    Comm.SendCommand(CurrentShip, CmdGetDef, null).Then<IDictionary<string, string>>(res => Job.Deserialize(res));
+                    Comm.SendCommand(CurrentShip, CmdGetTimers).Then<IList<string>>(res => timers = Enumerable.Concat(timers, res).ToArray());
+                    Comm.SendCommand(CurrentShip, CmdGetDef).Then<IDictionary<string, string>>(res => Job.Deserialize(res));
                 }
                 else
                     timers = Enumerable.Concat(timers, Util.GetBlocks<IMyTimerBlock>().Select(b => b.CustomName)).ToArray();
@@ -150,8 +165,9 @@ namespace IngameScript
                         Job.MiningJobStage = MiningJobStages.None;
                         Job.MiningJobProgress = 0;
                         if (IsController) {
-                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary(), false);
-                            Comm.SendCommand(CurrentShip, CmdStartNew, null);
+                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary());
+                            Comm.SendCommand(CurrentShip, CmdStartNew);
+                            ShowMiningMenu();
                             return;
                         }
                         Job.WorkLocation = Waypoint.AddPoint(p.MyMatrix, "WorkLocation");
@@ -159,8 +175,9 @@ namespace IngameScript
                     }),
                     new Item("Continue job", () => {// 3
                         if (IsController) {
-                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary(), false);
-                            Comm.SendCommand(CurrentShip, CmdStart, null);
+                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary());
+                            Comm.SendCommand(CurrentShip, CmdStart);
+                            ShowMiningMenu();
                             return;
                         }
                         p.CurrentJob.Type = JobType.MiningGrinding;
@@ -169,7 +186,7 @@ namespace IngameScript
                     Item.Separator,// 4
                     new Item("Reset!!!", () => {// 4
                         if (IsController) {
-                            Comm.SendCommand(CurrentShip, CmdReset, null, false);
+                            Comm.SendCommand(CurrentShip, CmdReset);
                         }
                         p.ExecuteCommand("reset");
                     }),
@@ -225,8 +242,9 @@ namespace IngameScript
                     new Item("Start job", () => {
                         p.CurrentJob.Type = JobType.Shuttle;
                         if (IsController) {
-                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary(), false);
-                            Comm.SendCommand(CurrentShip, CmdStart, null);
+                            Comm.SendCommand(CurrentShip, CmdSetDef, Job.Serialize().ToImmutableDictionary());
+                            Comm.SendCommand(CurrentShip, CmdStart);
+                            ShowTransitionMenu();
                             return;
                         }
                         p.ExecuteCommand("start");
@@ -259,22 +277,41 @@ namespace IngameScript
             public void ShowMiningMenu() {
                 var p = program;
                 var menu = CreateMenu("Mining/Grinding...", false, () => $"Stage: {p.Stage}");
-                menu.AddArray(new[] {
+
+                var items = new List<Item>();
+                if (IsController) {
+                    var task = Task.SetInterval(_ => {
+                        Promise.All(new[] {
+                            Comm.SendCommand(CurrentShip, CmdGetDef),
+                            Comm.SendCommand(CurrentShip, CmdGetStat)
+                        }).Then<IDictionary<string, string>[]>(res => {
+                            Job.Deserialize(res[0]);
+                            Stat.Deserialize(res[1]);
+                        });
+                    }, 0.5f);
+                    items.Insert(0, new Item("< Back", () => {
+                        Task.StopTask(task);
+                        Back();
+                    }));
+                }
+
+                items.AddArray(new[] {
                     new Item("Abort", () => {
                         p.ExecuteCommand("stop");
                     }),
                     Item.Separator,
-                    new Item("All Cargo", () => $"{p.FillLevel:F1} %", null),
-                    new Item("Ore", () => $"{p.OreAmount:F1} kg", null),
-                    new Item("Garbage", () => $"{p.GarbageAmount:F1} kg", null),
-                    new Item("Battery Lvl", () => $"{p.BatteriesLevel:F1} %", null),
+                    new Item("All Cargo", () => $"{Stat.FillLevel:F1} %", null),
+                    new Item("Ore", () => $"{Stat.OreAmount:F1} kg", null),
+                    new Item("Garbage", () => $"{Stat.GarbageAmount:F1} kg", null),
+                    new Item("Battery Lvl", () => $"{Stat.BatteriesLevel:F1} %", null),
                     new Item("Progress", () => $"{Job.MiningJobProgress} / {Stat.MiningRouteCount} shafts", null),
                 });
+
+                menu.AddList(items);
             }
 
             public void ShowTransitionMenu() {
                 var p = program;
-
                 var menu = CreateMenu("Transitioning...", false, () => {
                     var stage = Job.ShuttleStage;
                     var connectorEvent = "";
@@ -284,23 +321,35 @@ namespace IngameScript
                     }
                     return $"Status: {stage}{connectorEvent}";
                 });
-                menu.AddArray(new[] {
+
+                var items = new List<Item>();
+                if (IsController) {
+                    var task = Task.SetInterval(_ => Comm.SendCommand(CurrentShip, CmdGetStat).Then<IDictionary<string, string>>(res => Stat.Deserialize(res)), 1);
+                    items.Insert(0, new Item("< Back", () => {
+                        Task.StopTask(task);
+                        Back();
+                    }));
+                }
+
+                items.AddArray(new[] {
                     new Item("Abort", () => {
+                        if (IsController) {
+                            Comm.SendCommand(CurrentShip, CmdStop);
+                            menu[0].Action.Invoke();
+                            return;
+                        }
                         p.ExecuteCommand("stop");
                     }),
-                    new Item("Destination", () => $"{Stat.Destination?.Name ?? ""}", null),
-                    new Item("Battery Lvl", () => $"{p.BatteriesLevel:F1} %", null),
-                    new Item("Distance", () => {
-                        var distance = Vector3D.Distance(p.MyMatrix.Translation, Stat.Destination?.Matrix.Translation ?? Vector3D.Zero);
-                        return $"{distance:F1} m";
-                    }, null),
-                    new Item("Cur. Waypoint", () => $"{Stat.Current?.Name ?? ""}", null),
+                    new Item("Destination", () => $"{Stat.DestinationName}", null),
+                    new Item("Battery Lvl", () => $"{Stat.BatteriesLevel:F1} %", null),
+                    new Item("Cur. Waypoint", () => $"{Stat.CurrentName}", null),
                     new Item("Waypoints", () => $"{Stat.Count}", null),
                     new Item("Waypoints Left", () => $"{Stat.Left}", null),
-                    new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
+                    new Item("Cargo", () => $"{Stat.FillLevel:F1} %", null),
                 });
-            }
 
+                menu.AddList(items);
+            }
         }
     }
 }

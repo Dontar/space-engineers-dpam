@@ -411,16 +411,22 @@ namespace IngameScript
             if (start) {
                 if (!Task.IsRunning(_MainTask) && CurrentJob.Type != JobType.None) {
                     ToggleTransitionTask("", false);
-                    if (CurrentJob.Type == JobType.Shuttle)
+                    if (CurrentJob.Type == JobType.Shuttle) {
                         MainMenu.ShowTransitionMenu();
-                    else
+                        Status.Shuttling = true;
+                    }
+                    else {
                         MainMenu.ShowMiningMenu();
+                        Status.Mining = true;
+                    }
                     _MainTask = Task.RunTask(MainTask()).OnDone(() => {
                         MainMenu.Back();
                         if (CurrentJob.Type == JobType.MiningGrinding)
                             Drills.ForEach(d => d.Enabled = false);
                         ResetThrusters(Thrusters.Values.SelectMany(t => t));
                         ResetGyros();
+                        Status.Mining = false;
+                        Status.Shuttling = false;
                     });
                 }
             }
@@ -434,6 +440,7 @@ namespace IngameScript
                 if (!Task.IsRunning(_TransitionTask)) {
                     ToggleMainTask(false);
                     var stage = name == "Home" ? TransitionStages.TransitionToHome : TransitionStages.TransitionToWork;
+                    Status.Shuttling = true;
                     MainMenu.ShowTransitionMenu();
                     _TransitionTask = Task.RunTask(GotoPosition(stage, (pos) => {
                         IMyShipConnector connector;
@@ -447,6 +454,7 @@ namespace IngameScript
                             MainMenu.Back();
                             ResetThrusters(Thrusters.Values.SelectMany(t => t));
                             ResetGyros();
+                            Status.Shuttling = false;
                         });
                 }
             }

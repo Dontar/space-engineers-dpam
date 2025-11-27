@@ -38,7 +38,8 @@ namespace IngameScript
                 if (!isController) {
                     RegisterBrListener(CmdGetShipNames);
                     RequestHandlers.Add(CmdGetShipNames, msg => {
-                        Controllers.Add(msg.As<string>(), msg.Source);
+                        if (!Controllers.ContainsKey(msg.As<string>()))
+                            Controllers.Add(msg.As<string>(), msg.Source);
                         RespondToCmdMsg(msg, p.Me.CubeGrid.CustomName);
                     });
                     RequestHandlers.Add(CmdGetDef, msg => RespondToCmdMsg(msg, p.CurrentJob.Serialize().ToImmutableDictionary()));
@@ -87,8 +88,13 @@ namespace IngameScript
                 Task.SetInterval(_ => ProcessRequest(), 0);
             }
 
-            public Promise SendCommand(long ship, string command, object data, bool wait = true) {
+            public Promise SendCommand(long ship, string command, object data = null) {
+                var sent = igc.SendUnicastMessage(ship, command, data);
                 return new Promise(res => {
+                    if (!sent) {
+                        res(null);
+                        return;
+                    }
                     if (!Responses.ContainsKey(ship) || Responses[ship].Count == 0)
                         return;
                     var msg = Responses[ship].Peek();
@@ -96,10 +102,10 @@ namespace IngameScript
                         Responses[ship].Dequeue();
                         res(msg.Data);
                     }
-                }, igc.SendUnicastMessage(ship, command, data) && wait);
+                });
             }
 
-            public Promise SendBroadcast(string command, object data, bool wait = true) {
+            public Promise SendBroadcast(string command, object data = null) {
                 igc.SendBroadcastMessage(command, data);
                 var result = new Dictionary<long, object>();
                 return new Promise(res => {
@@ -115,7 +121,7 @@ namespace IngameScript
                     if (result.Count > 0) {
                         res(result);
                     }
-                }, wait);
+                });
             }
 
             public void RegisterBrListener(string command) {

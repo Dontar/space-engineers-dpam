@@ -12,34 +12,37 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         IMyShipController Controller;
-        MyShipMass Mass => Controller.CalculateShipMass();
-        MyShipVelocities Velocities => Controller.GetShipVelocities();
-        MatrixD MyMatrix => Controller.WorldMatrix;
-        Vector3D Gravity => Controller.GetTotalGravity();
         BoundingBox Dimensions;
         Dictionary<Base6Directions.Direction, IMyThrust[]> Thrusters;
         List<IMyShipConnector> Connectors;
         List<IMyShipDrill> Drills;
-        bool HasDrills => Drills != null && Drills.Count > 0;
         List<IMyShipGrinder> Grinders;
-        bool HasGrinders => Grinders != null && Grinders.Count > 0;
         List<IMyConveyorSorter> Sorters;
         List<IMyCargoContainer> CargoContainers;
         List<IMyGyro> Gyros;
         List<IMyInventory> Inventories;
         List<IMyBatteryBlock> Batteries;
-        double BatteriesLevel => Memo.Of("BatteryLevels", TimeSpan.FromSeconds(1.5), () => Batteries.Average(b => Util.NormalizeValue(b.CurrentStoredPower, b.MaxStoredPower, 100)));
+        IMySensorBlock Sensor;
         List<IMyInventory> DrillInventories;
+        MyShipMass Mass => Controller.CalculateShipMass();
+        MyShipVelocities Velocities => Controller.GetShipVelocities();
+        MatrixD MyMatrix => Controller.WorldMatrix;
+        Vector3D Gravity => Controller.GetTotalGravity();
+
+        bool HasDrills => Drills != null && Drills.Count > 0;
+        bool HasGrinders => Grinders != null && Grinders.Count > 0;
+
+        double BatteriesLevel => Memo.Of("BatteryLevels", TimeSpan.FromSeconds(1.5), () => Batteries.Average(b => Util.NormalizeValue(b.CurrentStoredPower, b.MaxStoredPower, 100)));
         float FillLevel => Inventories.Average(i => (float)Util.NormalizeValue(i.VolumeFillFactor, 1, 100));
         float OreAmount => Memo.Of("OreAmount", TimeSpan.FromSeconds(2), () => GetInventoryItemsAmountsWithoutGarbage());
-        IMySensorBlock Sensor;
+        double GarbageAmount => Memo.Of("GarbageAmount", TimeSpan.FromSeconds(2), () => GetInventoryGarbageAmount());
+
         List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => Util.GetScreens(_tag));
         List<MyItemType> Garbage => Memo.Of("Garbage", TimeSpan.FromSeconds(5), () => Sorters.SelectMany(s => {
             var list = new List<MyInventoryItemFilter>();
             s.GetFilterList(list);
             return list.Select(i => i.ItemType).Distinct();
         }).ToList());
-        double GarbageAmount => Memo.Of("GarbageAmount", TimeSpan.FromSeconds(2), () => GetInventoryGarbageAmount());
 
         void InitController() {
             var controllers = Util.GetBlocks<IMyRemoteControl>();
@@ -69,8 +72,8 @@ namespace IngameScript
 
             var cargoGroup = Util.GetGroupOrBlocks<IMyTerminalBlock>("Cargo");
             var cockPits = Util.GetBlocks<IMyCockpit>(b => Util.IsNotIgnored(b, _ignoreTag));
-            Inventories = (cargoGroup.Count > 0 
-                ? cargoGroup 
+            Inventories = (cargoGroup.Count > 0
+                ? cargoGroup
                 : cockPits
                     .Concat<IMyTerminalBlock>(Drills)
                     .Concat(Connectors)

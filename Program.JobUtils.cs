@@ -209,7 +209,7 @@ namespace IngameScript
 
             var last = path[path.Count - 1];
             var previous = path[0];
-            Status.Destination = last;
+            Status.DestinationName = last.Name;
             Status.Count = path.Count;
 
             var closestWaypoint = path.MinBy(w => (float)Vector3D.DistanceSquared(w.Matrix.Translation, MyMatrix.Translation));
@@ -230,7 +230,7 @@ namespace IngameScript
             job.ShuttleStage = last.Name == "Work" ? TransitionStages.TransitionToWork : TransitionStages.TransitionToHome;
             for (var i = pathIdx; i < path.Count; i++) {
                 var currentWaypoint = path[i];
-                Status.Current = currentWaypoint;
+                Status.CurrentName = currentWaypoint.Name;
                 Status.Left = path.Count - 1 - i;
                 while (!MoveGridToPosition(currentWaypoint.Matrix.Translation, Status.Speed, Status.MinDistance, false)) {
                     currentPosition = MyMatrix.Translation;
