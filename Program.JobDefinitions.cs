@@ -160,6 +160,7 @@ namespace IngameScript
 
         class JobDefinition : MyIni
         {
+            const string _VERSION = "1";
             // Path related
             public string Name;
             public bool Paused;
@@ -275,7 +276,7 @@ namespace IngameScript
 
             public JobDefinition(string name, string data) {
                 try {
-                    Name = name;
+                    Name = $"{name}_{_VERSION}";
                     TryParse(data);
                     Load();
                 }
@@ -347,7 +348,8 @@ namespace IngameScript
                 };
             }
             public void Deserialize(IDictionary<string, string> data) {
-                if (data == null) return;
+                if (data == null)
+                    return;
                 FillLevel = float.Parse(data["FillLevel"]);
                 OreAmount = float.Parse(data["OreAmount"]);
                 GarbageAmount = float.Parse(data["GarbageAmount"]);
