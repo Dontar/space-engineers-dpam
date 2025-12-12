@@ -14,7 +14,7 @@ namespace IngameScript
         {
             protected enum ItemType
             {
-                Item, Separator
+                Item, Separator, Checkbox
             }
             protected class Item
             {
@@ -49,6 +49,17 @@ namespace IngameScript
                 public Item(string label, Func<string> value, Action<int> incDec, Func<bool> isHidden) : this(label, value, incDec, null, false, isHidden) { }
                 public Item(string label, Action action, Func<bool> isHidden) : this(label, null, null, action, false, isHidden) { }
                 public static Item Separator => new Item("", null) { Type = ItemType.Separator };
+                public static Item CheckBox(string name, Action<bool> onChange, bool state = false) {
+                    Item item = null;
+                    item = new Item((state ? "[x] " : "[ ] ") + name, () => {
+                        state = !state;
+                        item.Label = (state ? "[x] " : "[ ] ") + name;
+                        onChange?.Invoke(state);
+                    }, null) {
+                        Type = ItemType.Checkbox
+                    };
+                    return item;
+                }
             }
 
             protected class Menu : List<Item>
