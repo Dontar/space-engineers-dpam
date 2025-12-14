@@ -101,13 +101,7 @@ namespace IngameScript
                     Item.Action?.Invoke();
                 }
 
-                public void Render(IMyTextSurface screen) {
-                    screen.ContentType = ContentType.TEXT_AND_IMAGE;
-                    screen.Alignment = TextAlignment.LEFT;
-                    screen.Font = "Monospace";
-                    var screenLines = Util.ScreenLines(screen);
-                    var screenColumns = Util.ScreenColumns(screen, '=');
-
+                public string Render(int screenLines, int screenColumns) {
                     var output = new List<string> {
                         _title,
                         string.Join("", Enumerable.Repeat("=", screenColumns))
@@ -140,10 +134,18 @@ namespace IngameScript
                     }
 
                     output.AddRange(Enumerable.Repeat("", screenLines - output.Count - footer.Count));
-                    screenColumns = Util.ScreenColumns(screen, '-');
                     output.AddRange(footer);
                     output.Add(string.Join("", Enumerable.Repeat("-", screenColumns)));
-                    screen.WriteText(string.Join(Environment.NewLine, output));
+                    return string.Join(Environment.NewLine, output);
+                }
+
+                public void Render(IMyTextSurface screen) {
+                    screen.ContentType = ContentType.TEXT_AND_IMAGE;
+                    screen.Alignment = TextAlignment.LEFT;
+                    screen.Font = "Monospace";
+                    var screenLines = Util.ScreenLines(screen);
+                    var screenColumns = Util.ScreenColumns(screen, '=');
+                    screen.WriteText(Render(screenLines, screenColumns));
                 }
             }
 
