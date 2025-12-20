@@ -29,11 +29,10 @@ namespace IngameScript
                 Result = result;
             }
             public Promise(Action<Action<object>> cb) {
-                ITask task = null;
-                task = Task.SetInterval(_ => {
+                Task.SetInterval(() => {
                     cb(Resolve);
                     if (isDone || onDone == null)
-                        Task.StopTask(task);
+                        Task.StopTask();
                 }, 0).OnDone(() => {
                     onDone?.Invoke(Result);
                 });
@@ -42,10 +41,9 @@ namespace IngameScript
             public static Promise All(Promise[] list) {
                 return new Promise(res => {
                     for (int i = 0; i < list.Length; i++)
-                        list[i].Then(_ => {});
+                        list[i].Then(_ => { });
                     var results = new object[list.Length];
-                    ITask task = null;
-                    task = Task.SetInterval(ctx => {
+                    Task.SetInterval(() => {
                         var completed = 0;
                         for (int i = 0; i < list.Length; i++) {
                             if (list[i].IsDone) {
@@ -55,12 +53,15 @@ namespace IngameScript
                         }
                         if (completed == list.Length) {
                             res(results);
-                            Task.StopTask(task);
+                            Task.StopTask();
                         }
                     }, 0);
                 });
             }
+
+            public static Promise Resolve(Action<Action<object>> cb) => new Promise(cb);
         }
+
         interface ITask
         {
             ITask Every(float seconds);
@@ -135,26 +136,26 @@ namespace IngameScript
                 return newTask;
             }
 
-            static IEnumerable InternalTask(Action<object> cb, bool timeout = false) {
+            static IEnumerable InternalTask(Action cb, bool timeout = false) {
                 if (timeout) {
-                    cb(null);
+                    cb();
                     yield break;
                 }
-                var context = new Dictionary<string, object>();
                 while (true) {
-                    cb(context);
+                    cb();
                     yield return null;
                 }
             }
-            public static ITask SetInterval(Action<Dictionary<string, object>> cb, float intervalSeconds) =>
-                RunTask(InternalTask(ctx => cb((Dictionary<string, object>)ctx))).Every(intervalSeconds);
+            public static ITask SetInterval(Action cb, float intervalSeconds) =>
+                RunTask(InternalTask(cb)).Every(intervalSeconds);
 
             public static ITask SetTimeout(Action cb, float delaySeconds) =>
-                RunTask(InternalTask(_ => cb(), true)).Once().Every(delaySeconds);
+                RunTask(InternalTask(cb, true)).Once().Every(delaySeconds);
 
-            public static void StopTask(ITask task) {
-                tasks.Remove((Task)task);
-                ((Task)task)?.onDone?.Invoke();
+            public static void StopTask(ITask task = null) {
+                var t = task ?? CurrentTask;
+                tasks.Remove((Task)t);
+                ((Task)t).onDone?.Invoke();
             }
 
             public static bool IsRunning(ITask task) {
@@ -162,9 +163,11 @@ namespace IngameScript
             }
 
             public static TimeSpan CurrentTaskLastRun;
+            public static ITask CurrentTask;
             public static void Tick(TimeSpan TimeSinceLastRun) {
                 for (int i = tasks.Count - 1; i >= 0; i--) {
                     var task = tasks[i];
+                    CurrentTask = task;
                     if (task.IsPaused)
                         continue;
 

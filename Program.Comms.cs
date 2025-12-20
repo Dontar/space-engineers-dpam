@@ -85,7 +85,7 @@ namespace IngameScript
                 uListener = igc.UnicastListener;
                 uListener.SetMessageCallback();
 
-                Task.SetInterval(_ => ProcessRequest(), 0);
+                Task.SetInterval(() => ProcessRequest(), 0);
             }
 
             public Promise SendCommand(long ship, string command, object data = null) {
