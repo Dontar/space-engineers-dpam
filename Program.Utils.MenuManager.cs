@@ -12,15 +12,9 @@ namespace IngameScript
     {
         class MenuManager
         {
-            protected enum ItemType
-            {
-                Item, Separator, Checkbox
-            }
             protected class Item
             {
-                public ItemType Type;
                 public string Label;
-                bool _Hidden;
                 public bool Hidden {
                     get {
                         return IsHidden?.Invoke() ?? _Hidden;
@@ -34,31 +28,59 @@ namespace IngameScript
                 public Action Action;
                 public Action<int> IncDec;
 
+                public bool IsSelectable;
+
+                bool _Hidden;
                 public Item(string label, Func<string> value, Action<int> incDec, Action action, bool hidden, Func<bool> isHidden) {
-                    Type = ItemType.Item;
                     Label = label;
                     Value = value;
                     IncDec = incDec;
                     Action = action;
                     _Hidden = hidden;
                     IsHidden = isHidden;
+                    IsSelectable = true;
                 }
                 public Item(string label, Func<string> value, Action<int> incDec, bool hidden = false) : this(label, value, incDec, null, hidden, null) { }
                 public Item(string label, Action action, bool hidden = false) : this(label, null, null, action, hidden, null) { }
-
                 public Item(string label, Func<string> value, Action<int> incDec, Func<bool> isHidden) : this(label, value, incDec, null, false, isHidden) { }
                 public Item(string label, Action action, Func<bool> isHidden) : this(label, null, null, action, false, isHidden) { }
-                public static Item Separator => new Item("", null) { Type = ItemType.Separator };
-                public static Item CheckBox(string name, Action<bool> onChange, bool state = false) {
-                    Item item = null;
-                    item = new Item((state ? "[x] " : "[ ] ") + name, () => {
-                        state = !state;
-                        item.Label = (state ? "[x] " : "[ ] ") + name;
-                        onChange?.Invoke(state);
-                    }, null) {
-                        Type = ItemType.Checkbox
-                    };
-                    return item;
+
+                public virtual string Render(int screenColumns, bool isSelected, bool isActive) {
+                    var value = Value?.Invoke();
+                    var sep = value != null ? ":" : "";
+                    var activeInd = isActive ? "-" : "";
+                    var selectInd = isSelected ? "> " : "  ";
+                    var labelWidth = screenColumns / 3 * 2;
+                    return string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + Label + sep, value ?? "");
+                }
+            }
+
+            protected class Separator : Item
+            {
+                public Separator() : base("", null) { IsSelectable = false; }
+                public override string Render(int screenColumns, bool isSelected, bool isActive) {
+                    return string.Join("", Enumerable.Repeat("-", screenColumns));
+                }
+            }
+
+            protected class Checkbox : Item
+            {
+                bool _state;
+                string _name;
+                Action<bool> _onChange;
+
+                public Checkbox(string name, Action<bool> onChange, bool state = false)
+                    : base((state ? "[x] " : "[ ] ") + name, null, null) {
+                    _state = state;
+                    _name = name;
+                    _onChange = onChange;
+                    Action = Toggle;
+                }
+
+                void Toggle() {
+                    _state = !_state;
+                    Label = (_state ? "[x] " : "[ ] ") + _name;
+                    _onChange?.Invoke(_state);
                 }
             }
 
@@ -83,7 +105,7 @@ namespace IngameScript
                     }
                     do {
                         _selectedOption = (_selectedOption - 1 + Count) % Count;
-                    } while (Item.Type == ItemType.Separator || Item.Hidden);
+                    } while (!Item.IsSelectable || Item.Hidden);
                 }
 
                 public void Down() {
@@ -93,7 +115,7 @@ namespace IngameScript
                     }
                     do {
                         _selectedOption = (_selectedOption + 1) % Count;
-                    } while (Item.Type == ItemType.Separator || Item.Hidden);
+                    } while (!Item.IsSelectable || Item.Hidden);
                 }
 
                 public void Apply() {
@@ -115,16 +137,9 @@ namespace IngameScript
 
                     for (int i = start; i < Math.Min(Count, start + pageSize); i++) {
                         var item = this[i];
-                        if (item.Hidden) {
+                        if (item.Hidden)
                             continue;
-                        }
-                        var label = item.Type == ItemType.Separator ? string.Join("", Enumerable.Repeat("-", screenColumns)) : item.Label;
-                        var value = item.Value?.Invoke();
-                        var sep = value != null ? ":" : "";
-                        var activeInd = i == _activeOption ? "-" : "";
-                        var selectInd = i == _selectedOption ? "> " : "  ";
-                        var labelWidth = screenColumns / 3 * 2;
-                        output.Add(string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + label + sep, value ?? ""));
+                        output.Add(item.Render(screenColumns, i == _selectedOption, i == _activeOption));
                     }
 
                     var footer = new List<string>();
