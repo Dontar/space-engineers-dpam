@@ -28,7 +28,7 @@ namespace IngameScript
                 list.Add(wp);
                 return wp;
             }
-            
+
             public static IMyAutopilotWaypoint AddPoint(List<IMyAutopilotWaypoint> list, MatrixD point, MatrixD reference, string name, long relatedEntityId = 0) {
                 var wp = new Waypoint(new[] { point.Translation - reference.Translation, point.Forward, point.Up }, name, reference.Translation, relatedEntityId);
                 list.Add(wp);
@@ -194,13 +194,7 @@ namespace IngameScript
                 Name = name;
                 Paused = Get(Name, "Paused").ToBoolean(true);
 
-                Vector3D loc;
-                Vector3D.TryParse(Get(Name, "CurrentLocation").ToString("").Trim('{', '}'), out loc);
-                CurrentLocation = loc;
-
-                // Vector3D pathRef;
-                // Vector3D.TryParse(Get(Name, "PathReference").ToString("").Trim('{', '}'), out pathRef);
-                // PathReference = pathRef;
+                CurrentLocation = Get(Name, "CurrentLocation").ToVector();
 
                 Path = Waypoint.FromData(Get(Name, "Path").ToString(""), "|"/* , PathReference */);
 
@@ -209,9 +203,7 @@ namespace IngameScript
                 WorkSpeed = Get(Name, "WorkSpeed").ToSingle(1f);
                 MinAltitude = Get(Name, "MinAltitude").ToSingle(10f);
 
-                Vector3D dimVec;
-                Vector3D.TryParse(Get(Name, "Dimensions").ToString("{X:10 Y:10 Z:10}").Trim('{', '}'), out dimVec);
-                Dimensions = dimVec;
+                Dimensions = Get(Name, "Dimensions").ToVector();
 
                 DepthMode = (DepthMode)Get(Name, "DepthMode").ToInt32((int)DepthMode.Depth);
                 StartPosition = (StartPosition)Get(Name, "StartPosition").ToInt32((int)StartPosition.TopLeft);
@@ -306,6 +298,13 @@ namespace IngameScript
             set {
                 CurrentJob.MiningJobStage = value;
             }
+        }
+    }
+    public static class MyIniValueExtension
+    {
+        public static Vector3D ToVector(this MyIniValue source, Vector3D def = default(Vector3D)) {
+            Vector3D result;
+            return Vector3D.TryParse(source.ToString("").Trim('{', '}'), out result) ? result : def;
         }
     }
 }

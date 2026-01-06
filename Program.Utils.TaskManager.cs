@@ -7,7 +7,62 @@ namespace IngameScript
 {
     partial class Program
     {
-        public interface ITask
+        class Promise
+        {
+            public bool IsDone => isDone;
+            public object Result;
+            public T As<T>() => (T)Result;
+
+            Action<object> onDone;
+            bool isDone;
+
+            public Promise Then(Action<object> cb) {
+                onDone += cb;
+                return this;
+            }
+            public Promise Then<T>(Action<T> cb) {
+                onDone += obj => cb((T)obj);
+                return this;
+            }
+            void Resolve(object result) {
+                isDone = true;
+                Result = result;
+            }
+            public Promise(Action<Action<object>> cb) {
+                Task.SetInterval(() => {
+                    cb(Resolve);
+                    if (isDone || onDone == null)
+                        Task.StopTask();
+                }, 0).OnDone(() => {
+                    onDone?.Invoke(Result);
+                });
+            }
+
+            public static Promise All(Promise[] list) {
+                return new Promise(res => {
+                    for (int i = 0; i < list.Length; i++)
+                        list[i].Then(_ => { });
+                    var results = new object[list.Length];
+                    Task.SetInterval(() => {
+                        var completed = 0;
+                        for (int i = 0; i < list.Length; i++) {
+                            if (list[i].IsDone) {
+                                results[i] = list[i].Result;
+                                completed++;
+                            }
+                        }
+                        if (completed == list.Length) {
+                            res(results);
+                            Task.StopTask();
+                        }
+                    }, 0);
+                });
+            }
+
+            public static Promise Resolve(Action<Action<object>> cb) => new Promise(cb);
+        }
+
+        interface ITask
         {
             ITask Every(float seconds);
             ITask Pause(bool pause = true);
@@ -19,8 +74,6 @@ namespace IngameScript
             T Result<T>();
             ITask OnDone<T>(Action<T> callback);
             ITask OnDone(Action callback);
-            bool Await();
-            bool Await<T>(out T result);
         }
         class Task : ITask
         {
@@ -67,13 +120,6 @@ namespace IngameScript
                 onDone += () => callback(((ITask)this).Result<T>());
                 return this;
             }
-            bool ITask.Await() {
-                return TaskResult != null || !IsRunning(this);
-            }
-            bool ITask.Await<T>(out T result) {
-                result = TaskResult != null ? (T)TaskResult : default(T);
-                return TaskResult != null || !IsRunning(this);
-            }
             static List<Task> tasks = new List<Task>();
 
             public static ITask RunTask(IEnumerable task) {
@@ -90,35 +136,38 @@ namespace IngameScript
                 return newTask;
             }
 
-            static IEnumerable InternalTask(Action<object> cb, bool timeout = false) {
+            static IEnumerable InternalTask(Action cb, bool timeout = false) {
                 if (timeout) {
-                    cb(null);
+                    cb();
                     yield break;
                 }
-                var context = new Dictionary<string, object>();
                 while (true) {
-                    cb(context);
+                    cb();
                     yield return null;
                 }
             }
-            public static ITask SetInterval(Action<Dictionary<string, object>> cb, float intervalSeconds) =>
-                RunTask(InternalTask(ctx => cb((Dictionary<string, object>)ctx))).Every(intervalSeconds);
+            public static ITask SetInterval(Action cb, float intervalSeconds) =>
+                RunTask(InternalTask(cb)).Every(intervalSeconds);
 
             public static ITask SetTimeout(Action cb, float delaySeconds) =>
-                RunTask(InternalTask(_ => cb(), true)).Once().Every(delaySeconds);
-            public static void StopTask(ITask task) {
-                tasks.Remove((Task)task);
-                ((Task)task)?.onDone?.Invoke();
+                RunTask(InternalTask(cb, true)).Once().Every(delaySeconds);
+
+            public static void StopTask(ITask task = null) {
+                var t = task ?? CurrentTask;
+                tasks.Remove((Task)t);
+                ((Task)t).onDone?.Invoke();
             }
 
             public static bool IsRunning(ITask task) {
-                return tasks.Contains((Task)task);
+                return tasks.Contains((Task)task) && !task.Paused;
             }
 
             public static TimeSpan CurrentTaskLastRun;
+            public static ITask CurrentTask;
             public static void Tick(TimeSpan TimeSinceLastRun) {
                 for (int i = tasks.Count - 1; i >= 0; i--) {
                     var task = tasks[i];
+                    CurrentTask = task;
                     if (task.IsPaused)
                         continue;
 

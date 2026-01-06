@@ -39,8 +39,8 @@ namespace IngameScript
             InitController();
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
-            Task.SetInterval((_) => RenderMenu(), 1.7f);
-            Task.SetInterval((_) => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
+            Task.SetInterval(() => RenderMenu(), 1.7f);
+            Task.SetInterval(() => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
             ToggleMainTask(!CurrentJob.Paused);
         }
 
@@ -269,7 +269,7 @@ namespace IngameScript
 
                                 if (job.DepthMode == DepthMode.Auto) {
                                     var currentCargo = OreAmount;
-                                    if (timer != null && timer.Await()) {
+                                    if (Task.IsRunning(timer)) {
                                         if (currentCargo != previousCargo) {
                                             timer = Task.SetTimeout(() => { }, 5);
                                             previousCargo = currentCargo;

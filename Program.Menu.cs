@@ -52,7 +52,7 @@ namespace IngameScript
                 PathRecordMenu.AddArray(new[] {
                     new Item("Start recording", () => p.ExecuteCommand("record -start")),
                     new Item("Stop recording", () => p.ExecuteCommand("record -stop")),
-                    Item.Separator,
+                    new Separator(),
                     new Item("Home", () => job.HasPath ? "Was set" : "None", null),
                     new Item("Work", () => job.HasPath && !p.Recording ? "Was set" : "None", null),
                     new Item("Path", () => $"Count: {job.Path?.Count ?? 0}", null),
@@ -83,7 +83,7 @@ namespace IngameScript
                         p.CurrentJob.Type = JobType.MiningGrinding;
                         p.ExecuteCommand("toggle -start");
                     }),
-                    Item.Separator,// 4
+                    new Separator(),// 4
                     new Item("Reset!!!", () => {// 4
                         p.ExecuteCommand("reset");
                     }),
@@ -126,7 +126,7 @@ namespace IngameScript
                     new Item("Abort", () => {
                         p.ExecuteCommand("toggle -stop");
                     }),
-                    Item.Separator,
+                    new Separator(),
                     new Item("All Cargo", () => $"{p.FillLevel:F1} %", null),
                     new Item("Ore", () => $"{p.OreAmount:F1} kg", null),
                     new Item("Garbage", () => $"{p.GarbageAmount:F1} kg", null),

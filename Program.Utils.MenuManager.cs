@@ -12,15 +12,9 @@ namespace IngameScript
     {
         class MenuManager
         {
-            protected enum ItemType
-            {
-                Item, Separator
-            }
             protected class Item
             {
-                public ItemType Type;
                 public string Label;
-                bool _Hidden;
                 public bool Hidden {
                     get {
                         return IsHidden?.Invoke() ?? _Hidden;
@@ -34,21 +28,60 @@ namespace IngameScript
                 public Action Action;
                 public Action<int> IncDec;
 
+                public bool IsSelectable;
+
+                bool _Hidden;
                 public Item(string label, Func<string> value, Action<int> incDec, Action action, bool hidden, Func<bool> isHidden) {
-                    Type = ItemType.Item;
                     Label = label;
                     Value = value;
                     IncDec = incDec;
                     Action = action;
                     _Hidden = hidden;
                     IsHidden = isHidden;
+                    IsSelectable = true;
                 }
                 public Item(string label, Func<string> value, Action<int> incDec, bool hidden = false) : this(label, value, incDec, null, hidden, null) { }
                 public Item(string label, Action action, bool hidden = false) : this(label, null, null, action, hidden, null) { }
-
                 public Item(string label, Func<string> value, Action<int> incDec, Func<bool> isHidden) : this(label, value, incDec, null, false, isHidden) { }
                 public Item(string label, Action action, Func<bool> isHidden) : this(label, null, null, action, false, isHidden) { }
-                public static Item Separator => new Item("", null) { Type = ItemType.Separator };
+
+                public virtual string Render(int screenColumns, bool isSelected, bool isActive) {
+                    var value = Value?.Invoke();
+                    var sep = value != null ? ":" : "";
+                    var activeInd = isActive ? "-" : "";
+                    var selectInd = isSelected ? "> " : "  ";
+                    var labelWidth = screenColumns / 3 * 2;
+                    return string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + Label + sep, value ?? "");
+                }
+            }
+
+            protected class Separator : Item
+            {
+                public Separator() : base("", null) { IsSelectable = false; }
+                public override string Render(int screenColumns, bool isSelected, bool isActive) {
+                    return string.Join("", Enumerable.Repeat("-", screenColumns));
+                }
+            }
+
+            protected class Checkbox : Item
+            {
+                bool _state;
+                string _name;
+                Action<bool> _onChange;
+
+                public Checkbox(string name, Action<bool> onChange, bool state = false)
+                    : base((state ? "[x] " : "[ ] ") + name, null, null) {
+                    _state = state;
+                    _name = name;
+                    _onChange = onChange;
+                    Action = Toggle;
+                }
+
+                void Toggle() {
+                    _state = !_state;
+                    Label = (_state ? "[x] " : "[ ] ") + _name;
+                    _onChange?.Invoke(_state);
+                }
             }
 
             protected class Menu : List<Item>
@@ -72,7 +105,7 @@ namespace IngameScript
                     }
                     do {
                         _selectedOption = (_selectedOption - 1 + Count) % Count;
-                    } while (Item.Type == ItemType.Separator || Item.Hidden);
+                    } while (!Item.IsSelectable || Item.Hidden);
                 }
 
                 public void Down() {
@@ -82,7 +115,7 @@ namespace IngameScript
                     }
                     do {
                         _selectedOption = (_selectedOption + 1) % Count;
-                    } while (Item.Type == ItemType.Separator || Item.Hidden);
+                    } while (!Item.IsSelectable || Item.Hidden);
                 }
 
                 public void Apply() {
@@ -90,13 +123,7 @@ namespace IngameScript
                     Item.Action?.Invoke();
                 }
 
-                public void Render(IMyTextSurface screen) {
-                    screen.ContentType = ContentType.TEXT_AND_IMAGE;
-                    screen.Alignment = TextAlignment.LEFT;
-                    screen.Font = "Monospace";
-                    var screenLines = Util.ScreenLines(screen);
-                    var screenColumns = Util.ScreenColumns(screen, '=');
-
+                public string Render(int screenLines, int screenColumns) {
                     var output = new List<string> {
                         _title,
                         string.Join("", Enumerable.Repeat("=", screenColumns))
@@ -110,16 +137,9 @@ namespace IngameScript
 
                     for (int i = start; i < Math.Min(Count, start + pageSize); i++) {
                         var item = this[i];
-                        if (item.Hidden) {
+                        if (item.Hidden)
                             continue;
-                        }
-                        var label = item.Type == ItemType.Separator ? string.Join("", Enumerable.Repeat("-", screenColumns)) : item.Label;
-                        var value = item.Value?.Invoke();
-                        var sep = value != null ? ":" : "";
-                        var activeInd = i == _activeOption ? "-" : "";
-                        var selectInd = i == _selectedOption ? "> " : "  ";
-                        var labelWidth = screenColumns / 3 * 2;
-                        output.Add(string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + label + sep, value ?? ""));
+                        output.Add(item.Render(screenColumns, i == _selectedOption, i == _activeOption));
                     }
 
                     var footer = new List<string>();
@@ -129,19 +149,28 @@ namespace IngameScript
                     }
 
                     output.AddRange(Enumerable.Repeat("", screenLines - output.Count - footer.Count));
-                    screenColumns = Util.ScreenColumns(screen, '-');
                     output.AddRange(footer);
                     output.Add(string.Join("", Enumerable.Repeat("-", screenColumns)));
-                    screen.WriteText(string.Join(Environment.NewLine, output));
+                    return string.Join(Environment.NewLine, output);
+                }
+
+                public void Render(IMyTextSurface screen) {
+                    screen.ContentType = ContentType.TEXT_AND_IMAGE;
+                    screen.Alignment = TextAlignment.LEFT;
+                    screen.Font = "Monospace";
+                    var screenLines = Util.ScreenLines(screen);
+                    var screenColumns = Util.ScreenColumns(screen, '=');
+                    screen.WriteText(Render(screenLines, screenColumns));
                 }
             }
 
-            protected Stack<Menu> menuStack = new Stack<Menu>();
+            protected Stack<Menu> menuStack;
 
             protected Program program;
 
             public MenuManager(Program program) {
                 this.program = program;
+                menuStack = new Stack<Menu>();
             }
             public void Up() => menuStack.Peek().Up();
             public void Down() => menuStack.Peek().Down();

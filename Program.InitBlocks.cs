@@ -15,7 +15,7 @@ namespace IngameScript
         MyShipMass Mass => Controller.CalculateShipMass();
         MyShipVelocities Velocities => Controller.GetShipVelocities();
         MatrixD MyMatrix => Controller.WorldMatrix;
-        Vector3D Gravity => Controller.GetTotalGravity();
+        Vector3D Gravity => Controller.GetNaturalGravity();
         BoundingBox Dimensions;
         Dictionary<Base6Directions.Direction, IMyThrust[]> Thrusters;
         List<IMyShipConnector> Connectors;
