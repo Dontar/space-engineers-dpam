@@ -29,11 +29,16 @@ namespace IngameScript
         #region mdk preserve
         string _tag = "{DPAM}";
         string _ignoreTag = "{Ignore}";
+        bool _isController = false;
         #endregion
 
         public Program() {
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             Util.Init(this);
+            if (_isController)
+                InitCommController();
+            else
+                InitCommShip();
             CurrentJob = new JobDefinition("Default", Storage);
             MainMenu = new ControlMenu(this);
             InitController();

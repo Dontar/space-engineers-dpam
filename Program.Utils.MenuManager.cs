@@ -84,7 +84,13 @@ namespace IngameScript
                 }
             }
 
-            protected class Menu : List<Item>
+            protected class Remote : Item
+            {
+                public Remote(Func<string> value) : base("", value, null) { }
+                public override string Render(int screenColumns, bool isSelected, bool isActive) => Value?.Invoke() ?? "";
+            }
+
+            protected class Menu : List<Item>, IDisposable
             {
                 int _selectedOption = 0;
                 int _activeOption = -1;
@@ -92,6 +98,8 @@ namespace IngameScript
                 Func<string> _footer;
                 Item Item => this[_selectedOption];
                 Item AItem => this[_activeOption];
+
+                public Action onDispose;
 
                 public Menu(string title, Func<string> footer = null) : base() {
                     _title = title;
@@ -162,6 +170,10 @@ namespace IngameScript
                     var screenColumns = Util.ScreenColumns(screen, '=');
                     screen.WriteText(Render(screenLines, screenColumns));
                 }
+
+                public void Dispose() {
+                    onDispose?.Invoke();
+                }
             }
 
             protected Stack<Menu> menuStack;
@@ -180,6 +192,7 @@ namespace IngameScript
                     menuStack.Pop();
             }
             public void Render(IMyTextSurface screen) => menuStack.Peek().Render(screen);
+            public string Render(int screenLines, int screenColumns) => menuStack.Peek().Render(screenLines, screenColumns);
 
             protected Menu CreateMenu(string title) => CreateMenu(title, true, null);
             protected Menu CreateMenu(string title, bool createBack) => CreateMenu(title, createBack, null);

@@ -13,9 +13,34 @@ namespace IngameScript
         ControlMenu MainMenu;
         class ControlMenu : MenuManager
         {
+            Program p;
+            JobDefinition job;
             public ControlMenu(Program program) : base(program) {
-                var p = program;
-                var job = p.CurrentJob;
+                p = program;
+                job = p.CurrentJob;
+                if (p._isController)
+                    ShowCommMenu();
+                else
+                    ShowRootMenu();
+            }
+
+            void ShowCommMenu() {
+                var menu = CreateMenu("DPAM Controller");
+                menu.AddArray(p.ShipList.Select(s => new Item(s.Value, () => ShowShipMenu(s.Key, s.Value))).ToArray());
+            }
+
+            void ShowShipMenu(long ship, string shipName) {
+                var menu = CreateMenu(shipName);
+                var task = Task.SetInterval(() => {
+                    p.IGC.SendUnicastMessage<object>(ship, "SCREEN_REQ", null);
+                }, 1);
+                menu.Add(new Remote(() => p.LatestScreen));
+                menu.onDispose += () => {
+                    Task.StopTask(task);
+                };
+            }
+
+            void ShowRootMenu() {
                 var menu = CreateMenu("DPAM Control");
                 menu.AddArray(new[] {
                     new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !job.HasPath && job.Type == JobType.None),
@@ -33,6 +58,7 @@ namespace IngameScript
                         job.Speed = Math.Max(10, job.WorkSpeed + down);
                     }),
                 });
+
             }
 
             T UpDownValue<T>(T[] array, T currentValue, int down) {
@@ -46,8 +72,6 @@ namespace IngameScript
                         menuStack.Push(PathRecordMenu);
                     return;
                 }
-                var p = program;
-                var job = p.CurrentJob;
                 PathRecordMenu = CreateMenu("Path Recording", () => $"Recording: " + (p.Recording ? "Yes" : "No"));
                 PathRecordMenu.AddArray(new[] {
                     new Item("Start recording", () => p.ExecuteCommand("record -start")),
@@ -60,13 +84,11 @@ namespace IngameScript
             }
 
             void ShowMiningConfigMenu(string jobType) {
-                var p = program;
                 var modes = (DepthMode[])Enum.GetValues(typeof(DepthMode));
                 var positions = (StartPosition[])Enum.GetValues(typeof(StartPosition));
                 var events = (EventEnum[])Enum.GetValues(typeof(EventEnum));
                 var timers = new[] { "None" }.Concat(Util.GetBlocks<IMyTimerBlock>().Select(b => b.CustomName)).ToArray();
                 var timerActions = Enum.GetValues(typeof(TimerAction)) as TimerAction[];
-                var job = p.CurrentJob;
                 var menu = CreateMenu($"{jobType} Job Setup");
 
                 var action1 = new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true);
@@ -118,9 +140,7 @@ namespace IngameScript
             }
 
             public void ShowMiningMenu() {
-                var p = program;
                 var status = p.Status;
-                var job = p.CurrentJob;
                 var menu = CreateMenu("Mining/Grinding...", false, () => $"Stage: {p.Stage}");
                 menu.AddArray(new[] {
                     new Item("Abort", () => {
@@ -136,11 +156,9 @@ namespace IngameScript
             }
 
             void ShowShuttleConfigMenu() {
-                var p = program;
                 var events = (EventEnum[])Enum.GetValues(typeof(EventEnum));
                 var timerActions = Enum.GetValues(typeof(TimerAction)) as TimerAction[];
                 var timers = new[] { "None" }.Concat(Util.GetBlocks<IMyTimerBlock>().Select(b => b.CustomName)).ToArray();
-                var job = p.CurrentJob;
                 var menu = CreateMenu("Shuttle Job Setup");
 
                 var action1 = new Item("  -Action", () => $"{job.TimerDockingHomeAction}", (down) => job.TimerDockingHomeAction = UpDownValue(timerActions, job.TimerDockingHomeAction, down), true);
@@ -185,8 +203,6 @@ namespace IngameScript
                         menuStack.Push(TransitionMenu);
                     return;
                 }
-                var p = program;
-                var job = p.CurrentJob;
                 var status = p.Status;
                 TransitionMenu = CreateMenu("Transitioning...", false, () => {
                     var stage = job.ShuttleStage;

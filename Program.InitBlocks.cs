@@ -33,7 +33,13 @@ namespace IngameScript
         float FillLevel => Inventories.Average(i => (float)Util.NormalizeValue(i.VolumeFillFactor, 1, 100));
         float OreAmount => Memo.Of("OreAmount", TimeSpan.FromSeconds(2), () => GetInventoryItemsAmountsWithoutGarbage());
         IMySensorBlock Sensor;
-        List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => Util.GetScreens(_tag));
+        List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => {
+            var screens = Util.GetScreens(_tag);
+            if (_isController && screens.Count == 0) {
+                screens.Add(Me.GetSurface(0));
+            }
+            return screens;
+        });
         List<MyItemType> Garbage => Memo.Of("Garbage", TimeSpan.FromSeconds(5), () => Sorters.SelectMany(s => {
             var list = new List<MyInventoryItemFilter>();
             s.GetFilterList(list);
@@ -53,7 +59,7 @@ namespace IngameScript
 
         void InitBlocks() {
             Thrusters = Util.GetBlocks<IMyThrust>(b => Util.IsNotIgnored(b, _ignoreTag))
-                .GroupBy(b => Controller.Orientation.TransformDirectionInverse(Base6Directions.GetOppositeDirection(b.Orientation.Forward)))
+                .GroupBy(b => b.Orientation.Forward)
                 .ToDictionary(k => k.Key, v => v.ToArray());
             Connectors = Util.GetBlocks<IMyShipConnector>(b => Util.IsNotIgnored(b, _ignoreTag) && !b.ThrowOut);
             Drills = Util.GetBlocks<IMyShipDrill>(b => Util.IsNotIgnored(b, _ignoreTag));
@@ -68,8 +74,8 @@ namespace IngameScript
 
             var cargoGroup = Util.GetGroupOrBlocks<IMyTerminalBlock>("Cargo");
             var cockPits = Util.GetBlocks<IMyCockpit>(b => Util.IsNotIgnored(b, _ignoreTag));
-            Inventories = (cargoGroup.Count > 0 
-                ? cargoGroup 
+            Inventories = (cargoGroup.Count > 0
+                ? cargoGroup
                 : cockPits
                     .Concat<IMyTerminalBlock>(Drills)
                     .Concat(Connectors)
