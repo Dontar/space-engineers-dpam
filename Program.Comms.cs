@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.ModAPI.Ingame;
+using VRageMath;
 
 namespace IngameScript
 {
@@ -22,6 +23,9 @@ namespace IngameScript
                         case "SCREEN_RESP":
                             LatestScreen = msg.As<string>();
                             break;
+                        case "POS_REQ":
+                            IGC.SendUnicastMessage(msg.Source, "POS_RES", Me.CubeGrid.GetPosition());
+                            break;
                     }
                 }
             }, 0);
@@ -41,29 +45,42 @@ namespace IngameScript
             public int cols;
         }
 
-        RemoteScreen remoteScreen;
+        RemoteScreen RemoteScr;
+        long ControllerAdders = 0;
+        Vector3D ControllerPos;
 
         void InitCommShip() {
             var regChannel = IGC.RegisterBroadcastListener("REG_REQ");
             var channel = IGC.UnicastListener;
             Task.SetInterval(() => {
+                if (ControllerAdders != 0)
+                    IGC.SendUnicastMessage<object>(ControllerAdders, "POS_REQ", null);
+            }, 2);
+            Task.SetInterval(() => {
                 if (regChannel.HasPendingMessage) {
                     var msg = regChannel.AcceptMessage();
                     var parts = msg.As<string>().Split('|');
-                    remoteScreen.lines = int.Parse(parts[0]);
-                    remoteScreen.cols = int.Parse(parts[1]);
-
+                    RemoteScr.lines = int.Parse(parts[0]);
+                    RemoteScr.cols = int.Parse(parts[1]);
+                    ControllerAdders = msg.Source;
                     IGC.SendUnicastMessage(msg.Source, "REG_RESP", Me.CubeGrid.CustomName);
                 }
                 if (channel.HasPendingMessage) {
                     var msg = channel.AcceptMessage();
-                    if (msg.Tag == "SCREEN_REQ") {
-                        var render = MainMenu.Render(remoteScreen.lines, remoteScreen.cols);
-                        IGC.SendUnicastMessage(msg.Source, "SCREEN_RESP", render);
-                    }
-                    if (msg.Tag.StartsWith("CMD_")) {
-                        var cmd = msg.Tag.Substring(4).ToLower();
-                        ExecuteCommand(cmd);
+                    switch (msg.Tag) {
+                        case "POS_RES":
+                            Vector3D.TryParse(msg.As<string>(), out ControllerPos);
+                            break;
+                        case "SCREEN_REQ":
+                            var render = MainMenu.Render(RemoteScr.lines, RemoteScr.cols);
+                            IGC.SendUnicastMessage(msg.Source, "SCREEN_RESP", render);
+                            break;
+                        default:
+                            if (msg.Tag.StartsWith("CMD_")) {
+                                var cmd = msg.Tag.Substring(4).ToLower();
+                                ExecuteCommand(cmd);
+                            }
+                            break;
                     }
                 }
             }, 0);

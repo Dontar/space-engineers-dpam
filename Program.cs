@@ -1,25 +1,11 @@
-﻿using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI.Ingame;
-using Sandbox.ModAPI.Interfaces;
-using SpaceEngineers.Game.ModAPI.Ingame;
+﻿using Sandbox.ModAPI.Ingame;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Timers;
-using VRage;
-using VRage.Collections;
-using VRage.Game;
-using VRage.Game.Components;
-using VRage.Game.GUI.TextPanel;
-using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Game.ObjectBuilders.Definitions;
-using VRage.Library.Utils;
 using VRageMath;
 
 namespace IngameScript
@@ -35,18 +21,20 @@ namespace IngameScript
         public Program() {
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             Util.Init(this);
+            MainMenu = new ControlMenu(this);
             if (_isController)
                 InitCommController();
-            else
+            else {
                 InitCommShip();
-            CurrentJob = new JobDefinition("Default", Storage);
-            MainMenu = new ControlMenu(this);
-            InitController();
+                CurrentJob = new JobDefinition("Default", Storage);
+                InitController();
+                Task.SetInterval(() => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
+                ToggleMainTask(!CurrentJob.Paused);
+            }
+
+            Task.SetInterval(() => RenderMenu(), 1.7f);
             Task.RunTask(Util.StatusMonitorTask(this));
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
-            Task.SetInterval(() => RenderMenu(), 1.7f);
-            Task.SetInterval(() => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
-            ToggleMainTask(!CurrentJob.Paused);
         }
 
         ITask _LogoTask;
@@ -57,7 +45,7 @@ namespace IngameScript
         Queue<string> commandQueue = new Queue<string>();
 
         public void Main(string argument, UpdateType updateSource) {
-            if (Controller == null) {
+            if (!_isController && Controller == null) {
                 Util.Echo("No controller found");
                 return;
             }
@@ -74,11 +62,12 @@ namespace IngameScript
             if (!updateSource.HasFlag(UpdateType.Update10))
                 return;
 
-            Memo.Of("OnBaseMassChange", Mass.BaseMass, (OldBaseMass) => {
-                if (OldBaseMass != 0)
-                    InitController();
-                InitBlocks();
-            });
+            if (!_isController)
+                Memo.Of("OnBaseMassChange", Mass.BaseMass, (OldBaseMass) => {
+                    if (OldBaseMass != 0)
+                        InitController();
+                    InitBlocks();
+                });
 
             Task.Tick(Runtime.TimeSinceLastRun);
             Memo.Tick(Runtime.TimeSinceLastRun);
@@ -364,6 +353,7 @@ namespace IngameScript
         }
 
         bool Recording;
+        bool UseReference;
         IEnumerable RecordPathTask() {
             var minDistance = Me.CubeGrid.WorldVolume.Radius * 2;
             var path = CurrentJob.Path;
@@ -372,21 +362,28 @@ namespace IngameScript
             MainMenu.ShowPathRecordMenu();
             Recording = true;
 
+            Vector3D reference;
+
+            if (UseReference)
+                reference = ControllerPos;
+            else
+                reference = MyMatrix.Translation;
+
             var matrix = MyMatrix;
-            Waypoint.AddPoint(path, matrix, "Home");
+            path.AddPoint("Home", matrix, reference);
             var previous = matrix.Translation;
 
             while (Recording) {
                 matrix = MyMatrix;
                 var position = matrix.Translation;
                 if (Vector3D.Distance(position, previous) > minDistance) {
-                    Waypoint.AddPoint(path, matrix, $"Waypoint#{counter++}");
+                    path.AddPoint($"Waypoint#{counter++}", matrix, reference);
                 }
                 previous = position;
                 yield return null;
             }
 
-            Waypoint.AddPoint(path, MyMatrix, "Work");
+            path.AddPoint("Work", MyMatrix, reference);
             CurrentJob.ShuttleStage = TransitionStages.AtWork;
         }
 

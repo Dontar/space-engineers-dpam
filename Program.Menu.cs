@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ParallelTasks;
 using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
+using VRage.Game.ModAPI.Ingame.Utilities;
 using VRageMath;
 
 namespace IngameScript
@@ -29,12 +29,16 @@ namespace IngameScript
                 menu.AddArray(p.ShipList.Select(s => new Item(s.Value, () => ShowShipMenu(s.Key, s.Value))).ToArray());
             }
 
+            bool RemoteActive = false;
+            long CurrentShip = 0;
             void ShowShipMenu(long ship, string shipName) {
-                var menu = CreateMenu(shipName);
+                var menu = CreateMenu(shipName, false);
                 var task = Task.SetInterval(() => {
                     p.IGC.SendUnicastMessage<object>(ship, "SCREEN_REQ", null);
                 }, 1);
                 menu.Add(new Remote(() => p.LatestScreen));
+                RemoteActive = true;
+                CurrentShip = ship;
                 menu.onDispose += () => {
                     Task.StopTask(task);
                 };
@@ -76,6 +80,7 @@ namespace IngameScript
                 PathRecordMenu.AddArray(new[] {
                     new Item("Start recording", () => p.ExecuteCommand("record -start")),
                     new Item("Stop recording", () => p.ExecuteCommand("record -stop")),
+                    new Item("Use controller as ref", () => p.UseReference.ToString(), (_) => p.UseReference = !p.UseReference ),
                     new Separator(),
                     new Item("Home", () => job.HasPath ? "Was set" : "None", null),
                     new Item("Work", () => job.HasPath && !p.Recording ? "Was set" : "None", null),
@@ -98,7 +103,7 @@ namespace IngameScript
                         job.Type = JobType.MiningGrinding;
                         job.MiningJobStage = MiningJobStages.None;
                         job.MiningJobProgress = 0;
-                        job.WorkLocation = Waypoint.AddPoint(p.MyMatrix, "WorkLocation");
+                        job.WorkLocation = new Waypoints.WP("WorkLocation", p.MyMatrix.ToArray());
                         p.ExecuteCommand("toggle -start");
                     }),
                     new Item("Continue job", () => {// 3
@@ -228,6 +233,27 @@ namespace IngameScript
                     new Item("Waypoints Left", () => $"{status.Left}", null),
                     new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
                 });
+            }
+
+            public override bool ProcessMenuCommands(MyCommandLine cmd) {
+                if (!RemoteActive)
+                    return base.ProcessMenuCommands(cmd);
+                var command = cmd.Argument(0);
+                switch (command.ToLower()) {
+                    case "up":
+                    case "apply":
+                    case "down":
+                        p.IGC.SendUnicastMessage<object>(CurrentShip, $"CMD_{command.ToUpper()}", null);
+                        break;
+                    case "back":
+                        RemoteActive = false;
+                        CurrentShip = 0;
+                        Back();
+                        break;
+                    default:
+                        return false;
+                }
+                return true;
             }
         }
     }

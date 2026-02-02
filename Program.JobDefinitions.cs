@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Windows.Markup;
-using Sandbox.Game.Entities;
 using Sandbox.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRageMath;
@@ -12,83 +10,70 @@ namespace IngameScript
 {
     public partial class Program : MyGridProgram
     {
-        class Waypoint : IMyAutopilotWaypoint
+        class Waypoints : List<IMyAutopilotWaypoint>
         {
-            public MatrixD RelativeMatrix => MatrixD.CreateWorld(_RelativeMatrix[0], _RelativeMatrix[1], _RelativeMatrix[2]);
-            public MatrixD Matrix => MatrixD.CreateWorld(Reference + _RelativeMatrix[0], _RelativeMatrix[1], _RelativeMatrix[2]);
-            public long RelatedEntityId => _RelatedEntityId;
-            public string Name => _Name;
-            internal Vector3D Reference;
-            long _RelatedEntityId = 0;
-            string _Name;
-            Vector3D[] _RelativeMatrix;
+            public struct WP : IMyAutopilotWaypoint
+            {
+                public MatrixD RelativeMatrix => MatrixD.CreateWorld(posOrient[0], posOrient[1], posOrient[2]);
+                public MatrixD Matrix => MatrixD.CreateWorld(reference + posOrient[0], posOrient[1], posOrient[2]);
+                public long RelatedEntityId => relatedEntityId;
+                public string Name => name;
+                string name;
+                Vector3D[] posOrient;
+                Vector3D reference;
+                long relatedEntityId;
 
-            public static IMyAutopilotWaypoint AddPoint(List<IMyAutopilotWaypoint> list, MatrixD point, string name) {
-                var wp = new Waypoint(new[] { point.Translation, point.Forward, point.Up }, name);
-                list.Add(wp);
-                return wp;
-            }
-
-            public static IMyAutopilotWaypoint AddPoint(List<IMyAutopilotWaypoint> list, MatrixD point, MatrixD reference, string name, long relatedEntityId = 0) {
-                var wp = new Waypoint(new[] { point.Translation - reference.Translation, point.Forward, point.Up }, name, reference.Translation, relatedEntityId);
-                list.Add(wp);
-                return wp;
-            }
-
-            public static IMyAutopilotWaypoint AddPoint(MatrixD point, string name) =>
-                new Waypoint(new[] { point.Translation, point.Forward, point.Up }, name);
-
-            public static IMyAutopilotWaypoint AddPoint(MatrixD point, MatrixD reference, string name, long relatedEntityId = 0) =>
-                new Waypoint(new[] { point.Translation - reference.Translation, point.Forward, point.Up }, name, reference.Translation, relatedEntityId);
-
-            Waypoint(Vector3D[] point, string name, Vector3D _reference = default(Vector3D), long relatedEntityId = 0) {
-                _RelativeMatrix = point;
-                Reference = _reference;
-                _Name = name;
-                _RelatedEntityId = relatedEntityId;
-            }
-
-            public static void SetReference(IEnumerable<IMyAutopilotWaypoint> list, Vector3D reference) {
-                foreach (var wp in list) {
-                    var w = wp as Waypoint;
-                    w.Reference = reference;
+                public WP(string name, Vector3D[] position, Vector3D reference = default(Vector3D)) {
+                    this.name = name;
+                    posOrient = position;
+                    this.reference = reference;
+                    relatedEntityId = 0;
                 }
+                public static WP FromString(string line, Vector3D reference = default(Vector3D)) {
+                    string name;
+                    Vector3D[] matrix;
+                    TryParse(line, out name, out matrix);
+                    return new WP(name, matrix, reference);
+                }
+                public override string ToString() {
+                    var relativeMatrix = RelativeMatrix;
+                    var forward = Vector3D.Round(relativeMatrix.Forward, 3);
+                    var up = Vector3D.Round(relativeMatrix.Up, 3);
+                    var pos = relativeMatrix.Translation;
+                    return string.Format("{0}@{1},{2},{3}", Name, pos, forward, up);
+                }
+            }
+
+            Vector3D Reference = Vector3D.Zero;
+
+            public void AddPoint(string name, MatrixD position, Vector3D reference) {
+                Reference = reference;
+                var wp = new WP(name, position.ToArray(reference), reference);
+                Add(wp);
             }
 
             public override string ToString() {
-                var forward = Vector3D.Round(_RelativeMatrix[1], 3);
-                var up = Vector3D.Round(_RelativeMatrix[2], 3);
-                var pos = _RelativeMatrix[0];
-                return string.Format("{0}@{1},{2},{3}", _Name, pos, forward, up);
-            }
-
-            public static Waypoint FromString(string data, Vector3D reference = default(Vector3D)) {
-                string name;
-                Vector3D[] matrix;
-                if (TryParse(data, out name, out matrix)) {
-                    return new Waypoint(matrix, name, reference);
-                }
-                return null;
-            }
-
-            public static string ToData(IEnumerable<IMyAutopilotWaypoint> list, string delimiter = null) {
-                delimiter = string.IsNullOrEmpty(delimiter) ? Environment.NewLine : delimiter;
                 var sb = new StringBuilder();
-                foreach (var wp in list) {
-                    sb.Append(wp.ToString() + delimiter);
+                sb.AppendFormat("Reference:{0}{1}", Reference, "|");
+                foreach (var wp in this) {
+                    sb.AppendFormat("{0}{1}", wp.ToString(), "|");
                 }
                 return sb.ToString();
             }
 
-            public static List<IMyAutopilotWaypoint> FromData(string data, string delimiter = null, Vector3D reference = default(Vector3D)) {
-                if (string.IsNullOrEmpty(data))
-                    return new List<IMyAutopilotWaypoint>();
-                delimiter = string.IsNullOrEmpty(delimiter) ? Environment.NewLine : delimiter;
-                return new List<IMyAutopilotWaypoint>(data
-                    .Split(new[] { delimiter }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(part => FromString(part, reference))
-                    .Where(w => w != null)
-                );
+            public static Waypoints FromString(string data) {
+                var waypoints = new Waypoints();
+                Vector3D reference = Vector3D.Zero;
+                var lines = data.Split(new[] { "|" }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines) {
+                    if (line.StartsWith("Reference:")) {
+                        var refStr = line.Substring("Reference:".Length);
+                        Vector3D.TryParse(refStr, out reference);
+                    }
+                    else
+                        waypoints.Add(WP.FromString(line, reference));
+                }
+                return waypoints;
             }
 
             static bool TryParse(string s, out string name, out Vector3D[] matrix) {
@@ -161,7 +146,7 @@ namespace IngameScript
             public string Name;
             public Vector3D CurrentLocation;
             public bool Paused;
-            public List<IMyAutopilotWaypoint> Path;
+            public Waypoints Path;
             // public Vector3D PathReference;
             public bool HasPath => Path != null && Path.Count > 0;
             public JobType Type;
@@ -196,7 +181,7 @@ namespace IngameScript
 
                 CurrentLocation = Get(Name, "CurrentLocation").ToVector();
 
-                Path = Waypoint.FromData(Get(Name, "Path").ToString(""), "|"/* , PathReference */);
+                Path = Waypoints.FromString(Get(Name, "Path").ToString(""));
 
                 Type = (JobType)Get(Name, "Type").ToInt32((int)JobType.None);
                 Speed = Get(Name, "Speed").ToSingle(30f);
@@ -208,7 +193,7 @@ namespace IngameScript
                 DepthMode = (DepthMode)Get(Name, "DepthMode").ToInt32((int)DepthMode.Depth);
                 StartPosition = (StartPosition)Get(Name, "StartPosition").ToInt32((int)StartPosition.TopLeft);
 
-                WorkLocation = Waypoint.FromString(Get(Name, "WorkLocation").ToString(""));
+                WorkLocation = Waypoints.WP.FromString(Get(Name, "WorkLocation").ToString(""));
 
                 MiningJobStage = (MiningJobStages)Get(Name, "MiningJobStage").ToInt32((int)MiningJobStages.None);
 
@@ -236,7 +221,7 @@ namespace IngameScript
             public string Save() {
                 Set(Name, "CurrentLocation", CurrentLocation.ToString());
                 Set(Name, "Paused", Paused);
-                Set(Name, "Path", Path != null ? Waypoint.ToData(Path, "|") : "");
+                Set(Name, "Path", Path != null ? Path.ToString() : "");
                 Set(Name, "Type", (int)Type);
                 Set(Name, "Speed", Speed);
                 Set(Name, "WorkSpeed", WorkSpeed);
@@ -305,6 +290,10 @@ namespace IngameScript
         public static Vector3D ToVector(this MyIniValue source, Vector3D def = default(Vector3D)) {
             Vector3D result;
             return Vector3D.TryParse(source.ToString("").Trim('{', '}'), out result) ? result : def;
+        }
+
+        public static Vector3D[] ToArray(this MatrixD source, Vector3D reference = default(Vector3D)) {
+            return new[] { source.Translation - reference, source.Forward, source.Up };
         }
     }
 }

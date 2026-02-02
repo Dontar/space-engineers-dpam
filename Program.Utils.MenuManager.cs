@@ -206,7 +206,7 @@ namespace IngameScript
                 return menu;
             }
 
-            public bool ProcessMenuCommands(MyCommandLine cmd) {
+            public virtual bool ProcessMenuCommands(MyCommandLine cmd) {
                 var command = cmd.Argument(0);
                 switch (command.ToLower()) {
                     case "up":

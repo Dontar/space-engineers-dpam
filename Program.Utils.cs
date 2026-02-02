@@ -82,7 +82,7 @@ namespace IngameScript
             public static double NormalizeValue(double value, double oldMin, double oldMax, double min, double max) {
                 double originalRange = oldMax - oldMin;
                 double newRange = max - min;
-                double normalizedValue = ((value - oldMin) * newRange / originalRange) + min;
+                double normalizedValue = (value - oldMin) * newRange / originalRange + min;
                 return normalizedValue;
             }
             public static double NormalizeValue(double value, double oldMax, double max)

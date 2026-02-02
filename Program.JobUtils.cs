@@ -21,7 +21,6 @@ namespace IngameScript
 
             var width = Dimensions.Width;
             var height = Dimensions.Height;
-            // var length = size.Z;
 
             var pivotPoint = width / 2;
             var maxForce = gyros.Sum(g => g.CubeGrid.GridSizeEnum == MyCubeSize.Small ? 448000 : 3.36E+07) * pivotPoint;
@@ -216,8 +215,8 @@ namespace IngameScript
             var pathIdx = path.IndexOf(closestWaypoint);
             if (pathIdx > 0) {
                 var direction = Vector3D.Normalize(path[pathIdx].Matrix.Translation - currentPosition);
-                var gravity = -Gravity;
-                previous = Waypoint.AddPoint(MatrixD.CreateWorld(currentPosition, Vector3D.ProjectOnPlane(ref direction, ref gravity), gravity), "Previous");
+                var up = -(Gravity == Vector3D.Zero ? MyMatrix.Up : Gravity);
+                previous = new Waypoints.WP("Previous", new[] { currentPosition, Vector3D.ProjectOnPlane(ref direction, ref up), up });
             }
             else
                 pathIdx = 1;
@@ -332,35 +331,23 @@ namespace IngameScript
         void BalanceDrillInventories() {
             var targetMass = DrillInventories.Average(i => (float)i.CurrentMass);
             foreach (var inv in DrillInventories) {
-                if ((float)inv.CurrentMass > targetMass) {
-                    var toTransfer = (float)inv.CurrentMass - targetMass;
-                    if (toTransfer <= 0)
-                        continue;
-                    List<MyInventoryItem> items = new List<MyInventoryItem>();
-                    inv.GetItems(items);
-                    foreach (var item in items) {
-                        var amountToTransfer = MathHelper.Min((float)item.Amount, toTransfer);
-                        var otherInv = DrillInventories.FirstOrDefault(i => i != inv && i.CanItemsBeAdded((MyFixedPoint)amountToTransfer, item.Type));
-                        if (otherInv != null && inv.TransferItemTo(otherInv, item, (MyFixedPoint)amountToTransfer)) {
-                            toTransfer -= amountToTransfer;
-                            if (toTransfer <= 0)
-                                break;
-                        }
+                if ((float)inv.CurrentMass < targetMass)
+                    continue;
+                var toTransfer = (float)inv.CurrentMass - targetMass;
+                if (toTransfer <= 0)
+                    continue;
+                List<MyInventoryItem> items = new List<MyInventoryItem>();
+                inv.GetItems(items);
+                foreach (var item in items) {
+                    var amountToTransfer = MathHelper.Min((float)item.Amount, toTransfer);
+                    var otherInv = DrillInventories.FirstOrDefault(i => i != inv && i.CanItemsBeAdded((MyFixedPoint)amountToTransfer, item.Type));
+                    if (otherInv != null && inv.TransferItemTo(otherInv, item, (MyFixedPoint)amountToTransfer)) {
+                        toTransfer -= amountToTransfer;
+                        if (toTransfer <= 0)
+                            break;
                     }
                 }
             }
-        }
-
-        string PathToGps() {
-            var gpsList = new List<string>();
-            if ((CurrentJob.Path?.Count ?? 0) == 0)
-                return "";
-            foreach (var waypoint in CurrentJob.Path) {
-                var pos = waypoint.Matrix.Translation;
-                var gps = $"GPS:{waypoint.Name}:{pos.X}:{pos.Y}:{pos.Z}:";
-                gpsList.Add(gps);
-            }
-            return string.Join(Environment.NewLine, gpsList);
         }
     }
 }
