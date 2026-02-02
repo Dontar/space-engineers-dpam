@@ -4,7 +4,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRageMath;
 
@@ -135,12 +134,12 @@ namespace IngameScript
                     else
                         Task.StopTask(_AlignTask);
                     break;
-                case "debug":
-                    var result = new StringBuilder(Storage);
-                    result.AppendLine("---");
-                    result.Append(PathToGps());
-                    Me.CustomData = result.ToString();
-                    break;
+                // case "debug":
+                //     var result = new StringBuilder(Storage);
+                //     result.AppendLine("---");
+                //     result.Append(PathToGps());
+                //     Me.CustomData = result.ToString();
+                //     break;
                 default:
                     if (MainMenu.ProcessMenuCommands(Cmd))
                         RenderMenu();
