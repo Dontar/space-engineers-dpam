@@ -10,7 +10,7 @@ namespace IngameScript
 {
     partial class Program
     {
-        class MenuManager
+        partial class MenuManager
         {
             protected class Item
             {
@@ -84,12 +84,6 @@ namespace IngameScript
                 }
             }
 
-            protected class Remote : Item
-            {
-                public Remote(Func<string> value) : base("", value, null) { }
-                public override string Render(int screenColumns, bool isSelected, bool isActive) => Value?.Invoke() ?? "";
-            }
-
             protected class Menu : List<Item>, IDisposable
             {
                 int _selectedOption = 0;
@@ -106,7 +100,7 @@ namespace IngameScript
                     _footer = footer;
                 }
 
-                public void Up() {
+                public virtual void Up() {
                     if (_activeOption > -1) {
                         AItem.IncDec?.Invoke(-1);
                         return;
@@ -116,7 +110,7 @@ namespace IngameScript
                     } while (!Item.IsSelectable || Item.Hidden);
                 }
 
-                public void Down() {
+                public virtual void Down() {
                     if (_activeOption > -1) {
                         AItem.IncDec?.Invoke(1);
                         return;
@@ -126,12 +120,14 @@ namespace IngameScript
                     } while (!Item.IsSelectable || Item.Hidden);
                 }
 
-                public void Apply() {
+                public virtual void Apply() {
                     _activeOption = _activeOption == _selectedOption ? -1 : Item.IncDec != null ? _selectedOption : -1;
                     Item.Action?.Invoke();
                 }
 
-                public string Render(int screenLines, int screenColumns) {
+                public virtual void Back() { }
+
+                public virtual string Render(int screenLines, int screenColumns) {
                     var output = new List<string> {
                         _title,
                         string.Join("", Enumerable.Repeat("=", screenColumns))
@@ -162,7 +158,7 @@ namespace IngameScript
                     return string.Join(Environment.NewLine, output);
                 }
 
-                public void Render(IMyTextSurface screen) {
+                public virtual void Render(IMyTextSurface screen) {
                     screen.ContentType = ContentType.TEXT_AND_IMAGE;
                     screen.Alignment = TextAlignment.LEFT;
                     screen.Font = "Monospace";
@@ -187,10 +183,6 @@ namespace IngameScript
             public void Up() => menuStack.Peek().Up();
             public void Down() => menuStack.Peek().Down();
             public void Apply() => menuStack.Peek().Apply();
-            public void Back() {
-                if (menuStack.Count > 1)
-                    menuStack.Pop();
-            }
             public void Render(IMyTextSurface screen) => menuStack.Peek().Render(screen);
             public string Render(int screenLines, int screenColumns) => menuStack.Peek().Render(screenLines, screenColumns);
 

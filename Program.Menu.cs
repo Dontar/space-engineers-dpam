@@ -18,30 +18,7 @@ namespace IngameScript
             public ControlMenu(Program program) : base(program) {
                 p = program;
                 job = p.CurrentJob;
-                if (p._isController)
-                    ShowCommMenu();
-                else
-                    ShowRootMenu();
-            }
-
-            void ShowCommMenu() {
-                var menu = CreateMenu("DPAM Controller");
-                menu.AddArray(p.ShipList.Select(s => new Item(s.Value, () => ShowShipMenu(s.Key, s.Value))).ToArray());
-            }
-
-            bool RemoteActive = false;
-            long CurrentShip = 0;
-            void ShowShipMenu(long ship, string shipName) {
-                var menu = CreateMenu(shipName, false);
-                var task = Task.SetInterval(() => {
-                    p.IGC.SendUnicastMessage<object>(ship, "SCREEN_REQ", null);
-                }, 1);
-                menu.Add(new Remote(() => p.LatestScreen));
-                RemoteActive = true;
-                CurrentShip = ship;
-                menu.onDispose += () => {
-                    Task.StopTask(task);
-                };
+                ShowRootMenu();
             }
 
             void ShowRootMenu() {
@@ -233,27 +210,6 @@ namespace IngameScript
                     new Item("Waypoints Left", () => $"{status.Left}", null),
                     new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
                 });
-            }
-
-            public override bool ProcessMenuCommands(MyCommandLine cmd) {
-                if (!RemoteActive)
-                    return base.ProcessMenuCommands(cmd);
-                var command = cmd.Argument(0);
-                switch (command.ToLower()) {
-                    case "up":
-                    case "apply":
-                    case "down":
-                        p.IGC.SendUnicastMessage<object>(CurrentShip, $"CMD_{command.ToUpper()}", null);
-                        break;
-                    case "back":
-                        RemoteActive = false;
-                        CurrentShip = 0;
-                        Back();
-                        break;
-                    default:
-                        return false;
-                }
-                return true;
             }
         }
     }

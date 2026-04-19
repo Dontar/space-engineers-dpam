@@ -14,26 +14,23 @@ namespace IngameScript
         #region mdk preserve
         string _tag = "{DPAM}";
         string _ignoreTag = "{Ignore}";
-        bool _isController = false;
+        bool _announce = true;
         #endregion
 
         public Program() {
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             Util.Init(this);
             MainMenu = new ControlMenu(this);
-            if (_isController)
-                InitCommController();
-            else {
-                InitCommShip();
-                CurrentJob = new JobDefinition("Default", Storage);
-                InitController();
-                Task.SetInterval(() => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
-                ToggleMainTask(!CurrentJob.Paused);
-            }
-
-            Task.SetInterval(() => RenderMenu(), 1.7f);
-            Task.RunTask(Util.StatusMonitorTask(this));
+            CurrentJob = new JobDefinition("Default", Storage);
+            InitController();
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
+            Task.RunTask(Util.StatusMonitorTask(this));
+            Task.SetInterval(() => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
+            Task.SetInterval(() => RenderMenu(), 1.7f);
+            if (_announce) {
+                Task.SetInterval(() => IGC.SendBroadcastMessage("SHIP_PING", "Hello!"), 30f);
+            }
+            ToggleMainTask(!CurrentJob.Paused);
         }
 
         ITask _LogoTask;
@@ -44,7 +41,7 @@ namespace IngameScript
         Queue<string> commandQueue = new Queue<string>();
 
         public void Main(string argument, UpdateType updateSource) {
-            if (!_isController && Controller == null) {
+            if (Controller == null) {
                 Util.Echo("No controller found");
                 return;
             }
@@ -61,12 +58,11 @@ namespace IngameScript
             if (!updateSource.HasFlag(UpdateType.Update10))
                 return;
 
-            if (!_isController)
-                Memo.Of("OnBaseMassChange", Mass.BaseMass, (OldBaseMass) => {
-                    if (OldBaseMass != 0)
-                        InitController();
-                    InitBlocks();
-                });
+            Memo.Of("OnBaseMassChange", Mass.BaseMass, (OldBaseMass) => {
+                if (OldBaseMass != 0)
+                    InitController();
+                InitBlocks();
+            });
 
             Task.Tick(Runtime.TimeSinceLastRun);
             Memo.Tick(Runtime.TimeSinceLastRun);
@@ -361,12 +357,7 @@ namespace IngameScript
             MainMenu.ShowPathRecordMenu();
             Recording = true;
 
-            Vector3D reference;
-
-            if (UseReference)
-                reference = ControllerPos;
-            else
-                reference = MyMatrix.Translation;
+            Vector3D reference = MyMatrix.Translation;
 
             var matrix = MyMatrix;
             path.AddPoint("Home", matrix, reference);

@@ -33,13 +33,7 @@ namespace IngameScript
         float FillLevel => Inventories.Average(i => (float)Util.NormalizeValue(i.VolumeFillFactor, 1, 100));
         float OreAmount => Memo.Of("OreAmount", TimeSpan.FromSeconds(2), () => GetInventoryItemsAmountsWithoutGarbage());
         IMySensorBlock Sensor;
-        List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => {
-            var screens = Util.GetScreens(_tag);
-            if (_isController && screens.Count == 0) {
-                screens.Add(Me.GetSurface(0));
-            }
-            return screens;
-        });
+        List<IMyTextSurface> Screens => Memo.Of("Screens", 10, () => Util.GetScreens(_tag));
         List<MyItemType> Garbage => Memo.Of("Garbage", TimeSpan.FromSeconds(5), () => Sorters.SelectMany(s => {
             var list = new List<MyInventoryItemFilter>();
             s.GetFilterList(list);
