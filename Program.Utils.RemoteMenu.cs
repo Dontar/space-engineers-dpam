@@ -10,7 +10,7 @@ namespace IngameScript
         partial class MenuManager
         {
             // ─── IGC channel tags ───────────────────────────────────────────────────
-            const string RMENU_CMD_TAG    = "RMENU_CMD";
+            const string RMENU_CMD_TAG = "RMENU_CMD";
             const string RMENU_RENDER_TAG = "RMENU_RENDER";
 
             // Host-side state
@@ -34,7 +34,8 @@ namespace IngameScript
             public void SendMenuRenderTo(long entityId, int lines, int cols) {
                 try {
                     program.IGC.SendUnicastMessage(entityId, RMENU_RENDER_TAG, Render(lines, cols));
-                } catch (Exception e) {
+                }
+                catch (Exception e) {
                     program.Echo($"[RemoteMenu] SendRender failed: {e.Message}");
                 }
             }
@@ -55,10 +56,12 @@ namespace IngameScript
             }
 
             internal void SendRemoteCommand(string command) {
-                if (_remoteHostId < 0) return;
+                if (_remoteHostId < 0)
+                    return;
                 try {
                     program.IGC.SendUnicastMessage(_remoteHostId, RMENU_CMD_TAG, command);
-                } catch (Exception e) {
+                }
+                catch (Exception e) {
                     program.Echo($"[RemoteMenu] SendCommand failed: {e.Message}");
                 }
             }
@@ -90,17 +93,19 @@ namespace IngameScript
                         ReceiveMenuRender(msg.As<string>());
                         return true;
                     }
-                } catch (Exception e) {
+                }
+                catch (Exception e) {
                     program.Echo($"[RemoteMenu] Message error: {e.Message}");
                 }
                 return false;
             }
 
+
+            int lines = 20, cols = 40;
             void ReceiveMenuCommand(string command, long sourceId) {
                 // Handle render-request from a newly connected viewer
                 if (command.StartsWith("req:")) {
                     var parts = command.Split(':');
-                    int lines = 20, cols = 40;
                     if (parts.Length >= 3) {
                         int.TryParse(parts[1], out lines);
                         int.TryParse(parts[2], out cols);
@@ -111,31 +116,36 @@ namespace IngameScript
                 }
 
                 switch (command.ToLower()) {
-                    case "up":    Up();    break;
-                    case "down":  Down();  break;
-                    case "apply": Apply(); break;
-                    case "back":  Back();  break;
-                    default: return;
+                    case "up":
+                        Up();
+                        break;
+                    case "down":
+                        Down();
+                        break;
+                    case "apply":
+                        Apply();
+                        break;
+                    case "back":
+                        Back();
+                        break;
+                    default:
+                        return;
                 }
 
                 // Push the updated render back to the viewer that issued the command.
                 // We don't know the screen size here, so use the last-requested size
                 // stored on the viewer entry (default 20x40 if unknown).
-                SendMenuRenderTo(sourceId, 20, 40);
+                SendMenuRenderTo(sourceId, lines, cols);
             }
 
             void ReceiveMenuRender(string content) => _activeRemoteMenu?.UpdateContent(content);
 
-            // ─── Back — defined here to include remote-menu cleanup ──────────────
-
-            public void Back() {
-                menuStack.Peek().Back(); // no-op for Menu; sends "back" to host for RemoteMenu
-                if (menuStack.Count > 1) {
-                    var top = menuStack.Pop();
-                    if (top == _activeRemoteMenu) {
-                        _remoteHostId     = -1;
-                        _activeRemoteMenu = null;
-                    }
+            public void Disconnect() {
+                var menu = menuStack.Peek();
+                if (menu is RemoteMenu) {
+                    menuStack.Pop();
+                    _remoteHostId = -1;
+                    _activeRemoteMenu = null;
                 }
             }
 
@@ -154,21 +164,26 @@ namespace IngameScript
                     _manager = manager;
                 }
 
-                public void UpdateContent(string content) { _content = content; }
+                public void UpdateContent(string content) {
+                    _content = content;
+                }
 
                 // Navigation commands are forwarded to the remote host instead of
                 // being handled locally.
-                public override void Up()    => _manager.SendRemoteCommand("up");
-                public override void Down()  => _manager.SendRemoteCommand("down");
+                public override void Up() => _manager.SendRemoteCommand("up");
+                public override void Down() => _manager.SendRemoteCommand("down");
                 public override void Apply() => _manager.SendRemoteCommand("apply");
-                public override void Back()  => _manager.SendRemoteCommand("back");
+                public override bool Back() {
+                    _manager.SendRemoteCommand("back");
+                    return true;
+                }
 
                 public override string Render(int screenLines, int screenColumns) => _content;
 
                 public override void Render(IMyTextSurface screen) {
                     screen.ContentType = ContentType.TEXT_AND_IMAGE;
-                    screen.Alignment   = TextAlignment.LEFT;
-                    screen.Font        = "Monospace";
+                    screen.Alignment = TextAlignment.LEFT;
+                    screen.Font = "Monospace";
                     screen.WriteText(_content);
                 }
             }

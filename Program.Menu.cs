@@ -25,9 +25,7 @@ namespace IngameScript
                 var menu = CreateMenu("DPAM Control");
                 menu.AddArray(new[] {
                     new Item("Start/Stop", () => p.ExecuteCommand("toggle"), () => !job.HasPath && job.Type == JobType.None),
-                    new Item("Record path & set home/work", () => {
-                        ShowPathRecordMenu();
-                    }),
+                    new Item("Record path & set home/work", () => ShowPathRecordMenu()),
                     new Item("Setup mining/grinding job", () => ShowMiningConfigMenu("Mining/Grinding"), () => !(p.HasDrills && job.HasPath)),
                     new Item("Setup shuttle job", () => ShowShuttleConfigMenu(), () => !job.HasPath),
                     new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !job.HasPath),
@@ -88,9 +86,7 @@ namespace IngameScript
                         p.ExecuteCommand("toggle -start");
                     }),
                     new Separator(),// 4
-                    new Item("Reset!!!", () => {// 4
-                        p.ExecuteCommand("reset");
-                    }),
+                    new Item("Reset!!!", () => p.ExecuteCommand("reset")),
                     new Item("Leave Home", () => $"{job.LeaveConnector1}", (down) => job.LeaveConnector1 = UpDownValue(events, job.LeaveConnector1, down)),// 6
                     new Item("Timer: \"Docking Home\"", () => job.TimerDockingHome, (down) => {// 7
                         job.TimerDockingHome = UpDownValue(timers, job.TimerDockingHome, down);
@@ -125,9 +121,7 @@ namespace IngameScript
                 var status = p.Status;
                 var menu = CreateMenu("Mining/Grinding...", false, () => $"Stage: {p.Stage}");
                 menu.AddArray(new[] {
-                    new Item("Abort", () => {
-                        p.ExecuteCommand("toggle -stop");
-                    }),
+                    new Item("Abort", () => p.ExecuteCommand("toggle -stop")),
                     new Separator(),
                     new Item("All Cargo", () => $"{p.FillLevel:F1} %", null),
                     new Item("Ore", () => $"{p.OreAmount:F1} kg", null),
@@ -196,9 +190,7 @@ namespace IngameScript
                     return $"Status: {stage}{connectorEvent}";
                 });
                 TransitionMenu.AddArray(new[] {
-                    new Item("Abort", () => {
-                        p.ExecuteCommand("toggle -stop");
-                    }),
+                    new Item("Abort", () => p.ExecuteCommand("toggle -stop")),
                     new Item("Destination", () => $"{status.Destination?.Name ?? ""}", null),
                     new Item("Battery Lvl", () => $"{p.BatteriesLevel:F1} %", null),
                     new Item("Distance", () => {

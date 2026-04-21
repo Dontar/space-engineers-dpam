@@ -125,7 +125,9 @@ namespace IngameScript
                     Item.Action?.Invoke();
                 }
 
-                public virtual void Back() { }
+                public virtual bool Back() {
+                    return false;
+                }
 
                 public virtual string Render(int screenLines, int screenColumns) {
                     var output = new List<string> {
@@ -183,6 +185,13 @@ namespace IngameScript
             public void Up() => menuStack.Peek().Up();
             public void Down() => menuStack.Peek().Down();
             public void Apply() => menuStack.Peek().Apply();
+            public void Back() {
+                var isRemote = menuStack.Peek().Back();
+                if (!isRemote && menuStack.Count > 1) {
+                    menuStack.Pop();
+                }
+            }
+
             public void Render(IMyTextSurface screen) => menuStack.Peek().Render(screen);
             public string Render(int screenLines, int screenColumns) => menuStack.Peek().Render(screenLines, screenColumns);
 
@@ -212,6 +221,9 @@ namespace IngameScript
                         break;
                     case "back":
                         Back();
+                        break;
+                    case "disconnect":
+                        Disconnect();
                         break;
                     default:
                         return false;
