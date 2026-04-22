@@ -15,6 +15,11 @@ namespace IngameScript
         string _tag = "{DPAM}";
         string _ignoreTag = "{Ignore}";
         bool _announce = true;
+
+
+
+
+
         #endregion
 
         public Program() {
