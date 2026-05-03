@@ -33,10 +33,8 @@ namespace IngameScript
             Task.SetInterval(() => CurrentJob.CurrentLocation = MyMatrix.Translation, 2f);
             Task.SetInterval(() => RenderMenu(), 1.7f);
             if (_announce) {
-                Task.SetInterval(() => {
-                    IGC.SendBroadcastMessage("SHIP_PING", Me.CubeGrid.CustomName);
-                    MainMenu.HandleRemoteMessages();
-                }, 30f);
+                Task.SetInterval(() => IGC.SendBroadcastMessage("SHIP_PING", Me.CubeGrid.CustomName), 30f);
+                Task.SetInterval(() => MainMenu.HandleRemoteMessages(), 1f);
             }
             ToggleMainTask(!CurrentJob.Paused);
         }
