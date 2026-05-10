@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRageMath;
 
@@ -14,7 +15,7 @@ namespace IngameScript
         #region mdk preserve
         string _tag = "{DPAM}";
         string _ignoreTag = "{Ignore}";
-        bool _announce = true;
+        bool _announce = false;
 
 
 
@@ -25,8 +26,8 @@ namespace IngameScript
         public Program() {
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             Util.Init(this);
-            MainMenu = new ControlMenu(this);
             CurrentJob = new JobDefinition("Default", Storage);
+            MainMenu = new ControlMenu(this);
             InitController();
             _LogoTask = Task.RunTask(Util.DisplayLogo("DPAM", Me.GetSurface(0))).Every(1.5f);
             Task.RunTask(Util.StatusMonitorTask(this));
@@ -136,12 +137,9 @@ namespace IngameScript
                     else
                         Task.StopTask(_AlignTask);
                     break;
-                // case "debug":
-                //     var result = new StringBuilder(Storage);
-                //     result.AppendLine("---");
-                //     result.Append(PathToGps());
-                //     Me.CustomData = result.ToString();
-                //     break;
+                case "debug":
+                    Me.CustomData = Storage;
+                    break;
                 default:
                     if (MainMenu.ProcessMenuCommands(Cmd))
                         RenderMenu();
@@ -400,7 +398,7 @@ namespace IngameScript
                     });
                 }
             }
-            else
+            else if (Task.IsRunning(_MainTask))
                 Task.StopTask(_MainTask);
             CurrentJob.Paused = !Task.IsRunning(_MainTask);
         }
@@ -418,7 +416,8 @@ namespace IngameScript
                             OnUnDockTimers(pos);
                         }
                         return true;
-                    }, WaitForDock)).Once()
+                    }, WaitForDockTimer))
+                        .Once()
                         .OnDone(() => {
                             MainMenu.Back();
                             ResetThrusters(Thrusters.Values.SelectMany(t => t));
@@ -426,7 +425,7 @@ namespace IngameScript
                         });
                 }
             }
-            else
+            else if (Task.IsRunning(_TransitionTask))
                 Task.StopTask(_TransitionTask);
         }
     }

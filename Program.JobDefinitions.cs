@@ -12,43 +12,44 @@ namespace IngameScript
     {
         class Waypoints : List<IMyAutopilotWaypoint>
         {
-            public struct WP : IMyAutopilotWaypoint
+            public class WP : IMyAutopilotWaypoint
             {
-                public MatrixD RelativeMatrix => MatrixD.CreateWorld(posOrient[0], posOrient[1], posOrient[2]);
-                public MatrixD Matrix => MatrixD.CreateWorld(reference + posOrient[0], posOrient[1], posOrient[2]);
+                public MatrixD RelativeMatrix => MatrixD.CreateWorld(position[0], position[1], position[2]);
+                public MatrixD Matrix => MatrixD.CreateWorld(reference + position[0], position[1], position[2]);
                 public long RelatedEntityId => relatedEntityId;
                 public string Name => name;
                 string name;
-                Vector3D[] posOrient;
+                Vector3D[] position;
                 Vector3D reference;
                 long relatedEntityId;
 
                 public WP(string name, Vector3D[] position, Vector3D reference = default(Vector3D)) {
                     this.name = name;
-                    posOrient = position;
+                    this.position = position;
                     this.reference = reference;
                     relatedEntityId = 0;
                 }
                 public static WP FromString(string line, Vector3D reference = default(Vector3D)) {
                     string name;
-                    Vector3D[] matrix;
-                    TryParse(line, out name, out matrix);
-                    return new WP(name, matrix, reference);
+                    Vector3D[] position;
+                    if (!TryParse(line, out name, out position))
+                        return null;
+                    return new WP(name, position, reference);
                 }
                 public override string ToString() {
-                    var relativeMatrix = RelativeMatrix;
-                    var forward = Vector3D.Round(relativeMatrix.Forward, 3);
-                    var up = Vector3D.Round(relativeMatrix.Up, 3);
-                    var pos = relativeMatrix.Translation;
-                    return string.Format("{0}@{1},{2},{3}", Name, pos, forward, up);
+                    var forward = Vector3D.Round(position[1], 3);
+                    var up = Vector3D.Round(position[2], 3);
+                    var pos = Vector3D.Round(position[0], 3);
+                    return string.Format("{0}@{1},{2},{3}", name, pos, forward, up);
                 }
             }
 
             Vector3D Reference = Vector3D.Zero;
 
-            public void AddPoint(string name, MatrixD position, Vector3D reference) {
-                Reference = reference;
-                var wp = new WP(name, position.ToArray(reference), reference);
+            public void AddPoint(string name, MatrixD position, Vector3D reference = default(Vector3D)) {
+                if (Count == 0)
+                    Reference = reference;
+                var wp = new WP(name, position.ToArray(Reference), Reference);
                 Add(wp);
             }
 
@@ -63,15 +64,22 @@ namespace IngameScript
 
             public static Waypoints FromString(string data) {
                 var waypoints = new Waypoints();
+                if (string.IsNullOrWhiteSpace(data))
+                    return waypoints;
+
                 Vector3D reference = Vector3D.Zero;
                 var lines = data.Split(new[] { "|" }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (var line in lines) {
                     if (line.StartsWith("Reference:")) {
                         var refStr = line.Substring("Reference:".Length);
                         Vector3D.TryParse(refStr, out reference);
+                        waypoints.Reference = reference;
                     }
-                    else
-                        waypoints.Add(WP.FromString(line, reference));
+                    else {
+                        var wp = WP.FromString(line, reference);
+                        if (wp != null)
+                            waypoints.Add(wp);
+                    }
                 }
                 return waypoints;
             }
@@ -141,6 +149,8 @@ namespace IngameScript
         }
         #endregion
 
+        const int _VERSION = 1;
+
         class JobDefinition : MyIni
         {
             public string Name;
@@ -174,9 +184,16 @@ namespace IngameScript
             public TimerAction TimerLeavingWorkAction;
 
             public void Load(string data, string name = "Default") {
+                Name = name;
                 if (!TryParse(data))
                     return;
-                Name = name;
+
+                var version = Get(Name, "Version").ToInt32(0);
+                if (version < _VERSION) {
+                    Util.Echo($"Job definition version {version} is outdated, resetting to default.", true);
+                    Clear();
+                }
+
                 Paused = Get(Name, "Paused").ToBoolean(true);
 
                 CurrentLocation = Get(Name, "CurrentLocation").ToVector();
@@ -219,6 +236,7 @@ namespace IngameScript
             }
 
             public string Save() {
+                Set(Name, "Version", _VERSION);
                 Set(Name, "CurrentLocation", CurrentLocation.ToString());
                 Set(Name, "Paused", Paused);
                 Set(Name, "Path", Path != null ? Path.ToString() : "");
@@ -227,7 +245,7 @@ namespace IngameScript
                 Set(Name, "WorkSpeed", WorkSpeed);
                 Set(Name, "MinAltitude", MinAltitude);
                 Set(Name, "Dimensions", Dimensions.ToString());
-                Set(Name, "DeptMode", (int)DepthMode);
+                Set(Name, "DepthMode", (int)DepthMode);
                 Set(Name, "StartPosition", (int)StartPosition);
                 Set(Name, "WorkLocation", WorkLocation?.ToString() ?? "");
                 Set(Name, "MiningJobStage", (int)MiningJobStage);
@@ -257,7 +275,7 @@ namespace IngameScript
                     Load(data, name);
                 }
                 catch (Exception ex) {
-                    Util.Echo($"Error loading job definition {ex.Message}" + Environment.NewLine + ex.StackTrace);
+                    Util.Echo($"Error loading job definition {ex.Message}" + Environment.NewLine + ex.StackTrace, true);
                 }
             }
         }
@@ -268,6 +286,8 @@ namespace IngameScript
         {
             public IMyAutopilotWaypoint Destination;
             public IMyAutopilotWaypoint Current;
+            public Vector3D CurrentPosition;
+            public double DistanceToCurrent => Current != null ? Vector3D.Distance(CurrentPosition, Current.Matrix.Translation) : 0;
             public int Count;
             public int Left;
             public double Speed;

@@ -46,13 +46,13 @@ namespace IngameScript
                 public Item(string label, Action action, Func<bool> isHidden) : this(label, null, null, action, false, isHidden) { }
 
                 public virtual string Render(int screenColumns, bool isSelected, bool isActive) {
-                    var value = Value?.Invoke();
-                    var sep = value != null ? ":" : "";
-                    var activeInd = isActive ? "-" : "";
-                    var selectInd = isSelected ? "> " : "  ";
-                    var labelWidth = screenColumns / 3 * 2;
-                    return string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + Label + sep, value ?? "");
-                }
+                        var value = Value?.Invoke();
+                        var sep = value != null ? ":" : "";
+                        var activeInd = isActive ? "-" : "";
+                        var selectInd = isSelected ? "> " : "  ";
+                        var labelWidth = screenColumns / 3 * 2;
+                        return string.Format($"{{0,-{labelWidth}}}{{1}}", activeInd + selectInd + Label + sep, value ?? "");
+                    }
             }
 
             protected class Separator : Item
@@ -93,7 +93,9 @@ namespace IngameScript
                 Item Item => this[_selectedOption];
                 Item AItem => this[_activeOption];
 
-                public Action onDispose;
+                public Action OnDispose {
+                    get; set;
+                }
 
                 public Menu(string title, Func<string> footer = null) : base() {
                     _title = title;
@@ -170,7 +172,7 @@ namespace IngameScript
                 }
 
                 public void Dispose() {
-                    onDispose?.Invoke();
+                    OnDispose?.Invoke();
                 }
             }
 

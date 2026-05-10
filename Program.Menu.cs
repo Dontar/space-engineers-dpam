@@ -31,13 +31,12 @@ namespace IngameScript
                     new Item("Go to Home", () => p.ExecuteCommand("go_home"), () => !job.HasPath),
                     new Item("Go to Work", () => p.ExecuteCommand("go_work"), () => !job.HasPath),
                     new Item("Speed limit", () => $"{job.Speed} m/s", (down) => {
-                        job.Speed = Math.Max(10, job.Speed + down);
+                        job.Speed = Math.Max(10, job.Speed - down);
                     }),
                     new Item("Work Speed", () => $"{job.WorkSpeed} m/s", (down) => {
-                        job.Speed = Math.Max(10, job.WorkSpeed + down);
+                        job.WorkSpeed = Math.Max(0, job.WorkSpeed - down);
                     }),
                 });
-
             }
 
             T UpDownValue<T>(T[] array, T currentValue, int down) {
@@ -198,8 +197,11 @@ namespace IngameScript
                         return $"{distance:F1} m";
                     }, null),
                     new Item("Cur. Waypoint", () => $"{status.Current?.Name ?? ""}", null),
+                    new Item("Distance to Cur. WP", () => $"{status.DistanceToCurrent:F1} m", null),
+                    new Item("MinDistance", () => $"{status.MinDistance:F1} m", null),
                     new Item("Waypoints", () => $"{status.Count}", null),
                     new Item("Waypoints Left", () => $"{status.Left}", null),
+                    new Item("Max Speed", () => $"{status.Speed:F2} m/s", null),
                     new Item("Cargo", () => $"{p.FillLevel:F1} %", null),
                 });
             }

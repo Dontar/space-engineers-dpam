@@ -90,7 +90,7 @@ namespace IngameScript
             // Subtract gravity to get the net required thrust
             var thrustVec = (velocityError * k - Gravity) * Mass.PhysicalMass;
 
-            Controller.DampenersOverride = Thrusters.ContainsKey(Base6Directions.Direction.Down);
+            Controller.DampenersOverride = Thrusters.ContainsKey(Base6Directions.Direction.Up);
 
             foreach (var dir in Thrusters.Keys) {
                 var thrusterArray = Thrusters[dir];
@@ -191,13 +191,26 @@ namespace IngameScript
             return new BoundingBox(min, max);
         }
 
+        float CalcStoppingDistance(float speed) {
+            IMyThrust[] brakingThrusters;
+            if (!Thrusters.TryGetValue(Base6Directions.Direction.Forward, out brakingThrusters) || brakingThrusters.Length == 0)
+                return float.MaxValue;
+
+            var maxBrakingThrust = brakingThrusters.Sum(t => t.MaxThrust);
+            if (maxBrakingThrust <= 0)
+                return float.MaxValue;
+
+            var decel = maxBrakingThrust / Mass.PhysicalMass;
+            return speed * speed / (2f * decel) * 1.5f;
+        }
+
         IEnumerable GotoPosition(TransitionStages stage, Func<string, bool> waitForUndock = null, Func<string, bool> waitForDock = null) {
             CurrentJob.ShuttleStage = stage;
             return GotoPosition(waitForUndock, waitForDock);
         }
 
         IEnumerable GotoPosition(Func<string, bool> waitForUndock = null, Func<string, bool> waitForDock = null) {
-            var currentPosition = MyMatrix.Translation;
+            Status.CurrentPosition = MyMatrix.Translation;
             var job = CurrentJob;
             if ((CurrentJob.Path?.Count ?? 0) == 0)
                 yield break;
@@ -214,9 +227,9 @@ namespace IngameScript
             var closestWaypoint = path.MinBy(w => (float)Vector3D.DistanceSquared(w.Matrix.Translation, MyMatrix.Translation));
             var pathIdx = path.IndexOf(closestWaypoint);
             if (pathIdx > 0) {
-                var direction = Vector3D.Normalize(path[pathIdx].Matrix.Translation - currentPosition);
+                var direction = Vector3D.Normalize(path[pathIdx].Matrix.Translation - Status.CurrentPosition);
                 var up = -(Gravity == Vector3D.Zero ? MyMatrix.Up : Gravity);
-                previous = new Waypoints.WP("Previous", new[] { currentPosition, Vector3D.ProjectOnPlane(ref direction, ref up), up });
+                previous = new Waypoints.WP("Previous", new[] { Status.CurrentPosition, Vector3D.ProjectOnPlane(ref direction, ref up), up });
             }
             else
                 pathIdx = 1;
@@ -224,20 +237,21 @@ namespace IngameScript
             while (!waitForUndock?.Invoke(path[0].Name) ?? false)
                 yield return null;
 
-            Status.MinDistance = 0.25f;
-            Status.Speed = 2;
+            Status.MinDistance = Dimensions.Width / 2;
+            Status.Speed = CurrentJob.Speed;
             job.ShuttleStage = last.Name == "Work" ? TransitionStages.TransitionToWork : TransitionStages.TransitionToHome;
+            var stoppingDistance = CalcStoppingDistance(CurrentJob.Speed);
             for (var i = pathIdx; i < path.Count; i++) {
                 var currentWaypoint = path[i];
                 Status.Current = currentWaypoint;
                 Status.Left = path.Count - 1 - i;
                 while (!MoveGridToPosition(currentWaypoint.Matrix.Translation, Status.Speed, Status.MinDistance, false)) {
-                    currentPosition = MyMatrix.Translation;
-                    var distanceToLast = Vector3D.Distance(currentPosition, last.Matrix.Translation);
-                    var distance = Math.Min(Vector3D.Distance(currentPosition, path[0].Matrix.Translation), distanceToLast);
-                    if (distance < 200) {
-                        Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distance, 200, CurrentJob.Speed));
-                        Status.MinDistance = (float)Math.Max(0.25f, Util.NormalizeValue(distance, 100, Dimensions.Width / 2));
+                    Status.CurrentPosition = MyMatrix.Translation;
+                    var distanceToLast = Vector3D.Distance(Status.CurrentPosition, last.Matrix.Translation);
+                    var distance = Math.Min(Vector3D.Distance(Status.CurrentPosition, path[0].Matrix.Translation), distanceToLast);
+                    if (distance < stoppingDistance) {
+                        Status.Speed = (float)Math.Max(2, Util.NormalizeValue(distance, stoppingDistance, CurrentJob.Speed));
+                        Status.MinDistance = (float)Math.Max(0.25f, Util.NormalizeValue(distance, stoppingDistance / 2, Dimensions.Width / 2));
                     }
                     var reverse = job.ShuttleStage == TransitionStages.TransitionToHome && distanceToLast > 50 && previous != path[0];
                     OrientGridToMatrix(Gyros, distanceToLast < 50 ? last.Matrix : previous.Matrix, reverse);
@@ -270,6 +284,26 @@ namespace IngameScript
             if (IsConnectedOrReady(out connector)) {
                 connector.Connect();
                 OnDockTimers(pos);
+                return true;
+            }
+            return false;
+        }
+
+        bool timerDone = false;
+        ITask _DockTimerTask;
+        bool WaitForDockTimer(string pos) {
+            if (_DockTimerTask == null) {
+                timerDone = false;
+                _DockTimerTask = Task.SetTimeout(() => timerDone = true, 3f);
+            }
+            IMyShipConnector connector;
+            if (IsConnectedOrReady(out connector)) {
+                connector.Connect();
+                OnDockTimers(pos);
+                return true;
+            }
+            if (_DockTimerTask != null && timerDone) {
+                _DockTimerTask = null;
                 return true;
             }
             return false;
