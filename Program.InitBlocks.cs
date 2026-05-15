@@ -18,6 +18,7 @@ namespace IngameScript
         Vector3D Gravity => Controller.GetNaturalGravity();
         BoundingBox Dimensions;
         Dictionary<Base6Directions.Direction, IMyThrust[]> Thrusters;
+        Dictionary<Base6Directions.Direction, float> ThrustersCapacity;
         List<IMyShipConnector> Connectors;
         List<IMyShipDrill> Drills;
         bool HasDrills => Drills != null && Drills.Count > 0;
@@ -55,6 +56,7 @@ namespace IngameScript
             Thrusters = Util.GetBlocks<IMyThrust>(b => Util.IsNotIgnored(b, _ignoreTag))
                 .GroupBy(b => b.Orientation.Forward)
                 .ToDictionary(k => k.Key, v => v.ToArray());
+            ThrustersCapacity = Thrusters.ToDictionary(k => k.Key, v => v.Value.Sum(t => t.MaxThrust));
             Connectors = Util.GetBlocks<IMyShipConnector>(b => Util.IsNotIgnored(b, _ignoreTag) && !b.ThrowOut);
             Drills = Util.GetBlocks<IMyShipDrill>(b => Util.IsNotIgnored(b, _ignoreTag));
             Grinders = Util.GetBlocks<IMyShipGrinder>(b => Util.IsNotIgnored(b, _ignoreTag));

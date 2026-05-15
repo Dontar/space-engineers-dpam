@@ -192,15 +192,15 @@ namespace IngameScript
         }
 
         float CalcStoppingDistance(float speed) {
-            IMyThrust[] brakingThrusters;
-            if (!Thrusters.TryGetValue(Base6Directions.Direction.Forward, out brakingThrusters) || brakingThrusters.Length == 0)
+            // Find the direction with the weakest (minimum) total thrust capacity
+            if (ThrustersCapacity == null || ThrustersCapacity.Count == 0)
                 return float.MaxValue;
 
-            var maxBrakingThrust = brakingThrusters.Sum(t => t.MaxThrust);
-            if (maxBrakingThrust <= 0)
+            var weakest = ThrustersCapacity.OrderBy(kv => kv.Value).First();
+            if (weakest.Value <= 0)
                 return float.MaxValue;
 
-            var decel = maxBrakingThrust / Mass.PhysicalMass;
+            var decel = weakest.Value / Mass.PhysicalMass;
             return speed * speed / (2f * decel) * 1.5f;
         }
 
